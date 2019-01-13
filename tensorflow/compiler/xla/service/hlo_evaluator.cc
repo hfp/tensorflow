@@ -258,14 +258,18 @@ StatusOr<Literal> HloEvaluator::Evaluate(
   for (const auto& literal_ptr : arg_literals) {
     arg_literals_.push_back(&*literal_ptr);
   }
+
+  // Re-seed RNG, either from the configuration's seed or a monotonic
+  // per-evaluator seed (which prevents two evaluators from returning the same
+  // random sequence).
   if (computation.parent()->config().seed()) {
     seed_ = computation.parent()->config().seed();
   } else {
-    std::random_device rd;
-    seed_ = rd();
+    // Start global_seed at a (true) random value.
+    static std::atomic<uint64> global_seed{std::random_device()()};
+    seed_ = global_seed.fetch_add(1);
   }
-
-  engine_ = std::minstd_rand0(seed_);
+  engine_.seed(seed_);
 
   TF_RETURN_IF_ERROR(computation.Accept(this));
   return GetEvaluatedLiteralFor(computation.root_instruction()).Clone();
@@ -412,15 +416,19 @@ Status HloEvaluator::HandleGetDimensionSize(
 }
 
 Status HloEvaluator::HandleParameter(HloInstruction* parameter) {
+  // Nothing to do other than sanity checks. Parameters' values are stored in
+  // arg_literals_.
   CHECK_LT(parameter->parameter_number(), arg_literals_.size());
+
+#ifndef NDEBUG
   const Literal* input_literal = arg_literals_[parameter->parameter_number()];
   VLOG(2) << "Parameter evaluated to: " << input_literal->ToString();
   DCHECK(ShapeUtil::Equal(parameter->shape(), input_literal->shape()))
       << "parameter shape is: " << ShapeUtil::HumanString(parameter->shape())
       << ", but input literal shape is: "
       << ShapeUtil::HumanString(input_literal->shape());
+#endif
 
-  evaluated_[parameter] = input_literal->Clone();
   return Status::OK();
 }
 
