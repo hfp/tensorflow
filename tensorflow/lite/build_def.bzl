@@ -253,6 +253,7 @@ def generated_test_models():
         "greater_equal",
         "sum",
         "l2norm",
+        "l2norm_shared_epsilon",
         "l2_pool",
         "leaky_relu",
         "less",
@@ -263,7 +264,7 @@ def generated_test_models():
         "logical_and",
         "logical_or",
         "logical_xor",
-        "lstm",
+        #"lstm", TODO(b/122889684): Resolve toco structured line parsing in oss.
         "max_pool",
         "maximum",
         "mean",

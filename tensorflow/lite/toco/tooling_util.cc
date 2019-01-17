@@ -173,7 +173,7 @@ bool DeleteArrayIfUsedOnce(const string& array_name, Model* model) {
   return false;
 }
 
-void DeleteOpAndArraysIfUnused(Model* model, Operator* op) {
+void DeleteOpAndArraysIfUnused(Model* model, const Operator* op) {
   for (const string& array_name : op->inputs) {
     DeleteArrayIfUsedOnce(array_name, model);
   }
@@ -417,6 +417,7 @@ const char* OperatorTypeName(OperatorType type) {
     HANDLE_OPERATORTYPENAME_CASE(SquaredDifference)
     HANDLE_OPERATORTYPENAME_CASE(MirrorPad)
     HANDLE_OPERATORTYPENAME_CASE(Unique)
+    HANDLE_OPERATORTYPENAME_CASE(UnidirectionalSequenceRnn)
     default:
       LOG(FATAL) << "Unhandled op type";
 #undef HANDLE_OPERATORTYPENAME_CASE

@@ -562,6 +562,9 @@ class DistributedVariable(DistributedDelegate):
   def read_value(self):
     return self._distribute_strategy.extended.read_var(self)
 
+  def value(self):
+    return self._get_closest().value()
+
   def _should_act_as_resource_variable(self):
     """Pass resource_variable_ops.is_resource_variable check."""
     pass
@@ -571,11 +574,12 @@ ops.register_dense_tensor_like_type(DistributedVariable)
 
 
 def _validate_colocate_extended(v, extended):
-  if v.distribute_strategy.extended is not extended:
+  variable_strategy = v._distribute_strategy  # pylint: disable=protected-access
+  if variable_strategy.extended is not extended:
     raise ValueError(
         "`colocate_vars_with` must only be passed a variable created in this "
         "tf.distribute.Strategy.scope(), not %s created in scope: %s" %
-        (v, v.distribute_strategy,))
+        (v, variable_strategy))
 
 
 def validate_colocate_distributed_variable(v, extended):
@@ -595,7 +599,7 @@ def validate_colocate_tpu_variable(v, extended):
 
 
 def validate_colocate(v, extended):
-  if not hasattr(v, "distribute_strategy"):
+  if not hasattr(v, "_distribute_strategy"):
     raise ValueError(
         "`colocate_vars_with` must only be passed a variable created in this "
         "tf.distribute.Strategy.scope(), not: %r" % (v,))
@@ -604,8 +608,8 @@ def validate_colocate(v, extended):
 
 def _apply_aggregation(strategy, value, aggregation, destinations):
   if aggregation == vs.VariableAggregation.ONLY_FIRST_REPLICA:
-    return strategy.broadcast(strategy.unwrap(value)[0],
-                              destinations=destinations)
+    return strategy.extended.broadcast_to(strategy.unwrap(value)[0],
+                                          destinations=destinations)
   reduce_op = reduce_util.ReduceOp.from_variable_aggregation(aggregation)
   return strategy.extended.reduce_to(reduce_op, value, destinations)
 
@@ -1174,7 +1178,7 @@ class _ReplicaLocalSaveable(saver.BaseSaverBuilder.SaveableObject):
     # We use a callable so that we don't have to evaluate this expression
     # in the case where we are trying to restore instead of save.
     def tensor():
-      strategy = replica_local_variable.distribute_strategy
+      strategy = replica_local_variable._distribute_strategy  # pylint: disable=protected-access
       return strategy.extended.read_var(replica_local_variable)
 
     spec = saver.BaseSaverBuilder.SaveSpec(

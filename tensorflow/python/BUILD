@@ -178,6 +178,7 @@ py_library(
         "//tensorflow/python/eager:def_function",
         "//tensorflow/python/eager:profiler",
         "//tensorflow/python/eager:remote",
+        "//tensorflow/python/module",
         "//tensorflow/python/ops/distributions",
         "//tensorflow/python/ops/linalg",
         "//tensorflow/python/ops/losses",
@@ -212,6 +213,7 @@ py_library(
         ":pywrap_tensorflow",
         ":util",
         "//tensorflow/core:protos_all_py",
+        "@absl_py//absl:app",
         "@absl_py//absl/flags",
         "@six_archive//:six",
     ],
@@ -232,7 +234,10 @@ py_library(
     name = "platform_test",
     srcs = ["platform/googletest.py"],
     srcs_version = "PY2AND3",
-    deps = [":platform_benchmark"],
+    deps = [
+        ":platform_benchmark",
+        "@absl_py//absl/testing:absltest",
+    ],
 )
 
 tf_py_test(
@@ -3516,7 +3521,7 @@ cuda_py_test(
 
 cuda_py_test(
     name = "nn_fused_batchnorm_test",
-    size = "large",
+    size = "medium",
     srcs = ["ops/nn_fused_batchnorm_test.py"],
     additional_deps = [
         ":array_ops",

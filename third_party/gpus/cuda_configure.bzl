@@ -1067,10 +1067,10 @@ def _create_dummy_repository(repository_ctx):
 
   # Create dummy files for the CUDA toolkit since they are still required by
   # tensorflow/core/platform/default/build_config:cuda.
-  repository_ctx.file("cuda/cuda/include/cuda.h", "")
-  repository_ctx.file("cuda/cuda/include/cublas.h", "")
-  repository_ctx.file("cuda/cuda/include/cudnn.h", "")
-  repository_ctx.file("cuda/cuda/extras/CUPTI/include/cupti.h", "")
+  repository_ctx.file("cuda/cuda/include/cuda.h")
+  repository_ctx.file("cuda/cuda/include/cublas.h")
+  repository_ctx.file("cuda/cuda/include/cudnn.h")
+  repository_ctx.file("cuda/cuda/extras/CUPTI/include/cupti.h")
   repository_ctx.file("cuda/cuda/lib/%s" % _lib_name("cuda", cpu_value))
   repository_ctx.file("cuda/cuda/lib/%s" % _lib_name("cudart", cpu_value))
   repository_ctx.file(
@@ -1492,17 +1492,16 @@ def _create_remote_cuda_repository(repository_ctx, remote_config_repo):
               ),
       },
   )
-  _tpl(
-      repository_ctx,
-      "cuda:remote.BUILD",
-      {
-          "%{remote_cuda_repo}": remote_config_repo,
-      },
+  repository_ctx.template(
       "cuda/BUILD",
+      Label(remote_config_repo + "/cuda/BUILD"),
+      {},
   )
-  _tpl(repository_ctx, "crosstool:remote.BUILD", {
-      "%{remote_cuda_repo}": remote_config_repo,
-  }, "crosstool/BUILD")
+  repository_ctx.template(
+      "crosstool/BUILD",
+      Label(remote_config_repo + "/crosstool/BUILD"),
+      {},
+  )
 
 
 def _cuda_autoconf_impl(repository_ctx):

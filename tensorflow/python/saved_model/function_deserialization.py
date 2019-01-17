@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Tools for deserializing PolymorphicFunctions."""
+"""Tools for deserializing `Function`s."""
 
 from __future__ import absolute_import
 from __future__ import division
@@ -71,25 +71,48 @@ def _deserialize_function_spec(function_spec_proto, coder):
                                    kwargs_to_include, input_signature)
 
 
-def recreate_polymorphic_function(
-    saved_polymorphic_function, functions):
-  """Creates a PolymorphicFunction from a SavedPolymorphicFunction.
+def recreate_concrete_function(saved_concrete_function, concrete_functions):
+  """Recreates a user-facing concrete function."""
+  coder = nested_structure_coder.StructureCoder()
+
+  concrete_function = concrete_functions[saved_concrete_function.name]
+  input_signature = coder.decode_proto(
+      saved_concrete_function.canonicalized_input_signature)
+  input_signature_args, input_signature_kwargs = input_signature
+  if input_signature_kwargs:
+    raise ValueError("Restoring concrete function with non-empty kwargs (%s)." %
+                     input_signature_kwargs)
+
+  # pylint: disable=protected-access
+  # Set metadata required for the concrete function to accept keyword and
+  # positional arguments in __call__. Normally this is set in
+  # get_concrete_function.
+  concrete_function._arg_keywords = [spec.name for spec in input_signature_args]
+  # TODO(allenl): Should we preserve the number of allowed positional arguments?
+  concrete_function._num_positional_args = len(input_signature_args)
+  # pylint: enable=protected-access
+  concrete_function.add_to_graph()
+  return concrete_function
+
+
+def recreate_function(saved_function, concrete_functions):
+  """Creates a `Function` from a `SavedFunction`.
 
   Args:
-    saved_polymorphic_function: SavedPolymorphicFunction proto.
-    functions: map from function name to Function.
+    saved_function: `SavedFunction` proto.
+    concrete_functions: map from function name to `ConcreteFunction`.
 
   Returns:
-    A PolymorphicFunction.
+    A `Function`.
   """
-  # TODO(andresp): Construct a PolymorphicFunction with the cache populated
-  # instead of creating a new PolymorphicFunction backed by a Python layer to
+  # TODO(andresp): Construct a `Function` with the cache populated
+  # instead of creating a new `Function` backed by a Python layer to
   # glue things together. Current approach is nesting functions deeper for each
   # serialization cycle.
 
   coder = nested_structure_coder.StructureCoder()
-  function_spec = _deserialize_function_spec(
-      saved_polymorphic_function.function_spec, coder)
+  function_spec = _deserialize_function_spec(saved_function.function_spec,
+                                             coder)
 
   # TODO(mdan): We may enable autograph once exceptions are supported.
   @def_function.function(autograph=False)
@@ -97,30 +120,27 @@ def recreate_polymorphic_function(
     """Calls a restored function."""
     # TODO(allenl): Functions saved with input_signatures should revive with
     # input_signatures.
-    for monomorphic_function in saved_polymorphic_function.monomorphic_function:
-      function_obj = functions[monomorphic_function.concrete_function]
+    for concrete_function in saved_function.concrete_function:
+      function_obj = concrete_functions[concrete_function.name]
       canonicalized_original_inputs = coder.decode_proto(
-          monomorphic_function.canonicalized_input_signature)
+          concrete_function.canonicalized_input_signature)
+
       try:
-        can_args, can_kwargs = function_spec.canonicalize_function_inputs(
+        canonicalized_inputs = function_spec.canonicalize_function_inputs(
             *args, **kwargs)
-        if can_kwargs:
-          # TODO(vbardiovsky): Enable this along with the structured input and
-          # structured output.
-          raise ValueError(
-              "Received keywords arguments that could not be bound: %s" %
-              kwargs)
       except ValueError:
         continue
 
-      if _inputs_compatible(can_args,
+      if _inputs_compatible(canonicalized_inputs,
                             canonicalized_original_inputs):
-        flattened_inputs = nest.flatten(can_args)
+        flattened_inputs = nest.flatten(canonicalized_inputs)
         filtered_inputs = [t for t in flattened_inputs if _is_tensor(t)]
         return function_obj._call_flat(filtered_inputs)  # pylint: disable=protected-access
 
     raise AssertionError(
-        "Could not find matching function to call for arguments: %s" % (args,))
+        "Could not find matching function to call for args %r and kwargs %r" %
+        (args, kwargs))
+
   return restored_function
 
 
@@ -134,8 +154,8 @@ def load_function_def_library(library):
     library: FunctionDefLibrary proto message.
 
   Returns:
-    Map of original function names in the library to instances of `Function`
-    without captured inputs.
+    Map of original function names in the library to instances of
+    `ConcreteFunction` without captured inputs.
 
   Raises:
     ValueError: if functions dependencies have a cycle.
@@ -153,7 +173,7 @@ def load_function_def_library(library):
       copy = _fix_fdef(fdef, name_mapping)
 
       func_graph = function_def_lib.function_def_to_graph(copy)
-      func = function_lib.Function(func_graph)
+      func = function_lib.ConcreteFunction(func_graph)
       func.add_to_graph(import_graph)
 
       name_mapping[fdef.signature.name] = func.name
@@ -220,8 +240,8 @@ def _list_function_deps(fdef):
 
 def _clean_function_name(name):
   """Vanity function to keep the function names comprehensible."""
-  # Note: each time a function is wrapped into `function_lib.Function` its
-  # name becomes "__inference_<orig>_xyz".
+  # Note: each time a function is wrapped into `function_lib.ConcreteFunction`
+  # its name becomes "__inference_<orig>_xyz".
   match = re.search(r"^__inference_(.*)_\d+$", name)
   if match:
     return match.group(1)

@@ -364,9 +364,6 @@ TEST(TRT_TensorOrWeights_Test, Basic) {
       EXPECT_EQ(false, ptr->is_tensor());
       EXPECT_EQ(true, ptr->is_weights());
       EXPECT_TRUE(TrtShapedWeightsEquals(weights, ptr->weights()));
-
-      nvinfer1::Dims dims;
-      dims.nbDims = 0;
       ExpectTrtDimsEqualsArray({}, ptr->GetTrtDims());
     }
   }
@@ -922,8 +919,10 @@ TEST_F(ConverterTest, CreateConstantLayer) {
     nvinfer1::ITensor* tensor =
         converter_->CreateConstantLayer(weights, GetTestDims({3, 10}));
     ASSERT_NE(nullptr, tensor);
+    EXPECT_EQ(TfDataTypeToTrt(dtype), tensor->getType())
+        << "Expected " << DebugString(TfDataTypeToTrt(dtype)) << " vs. actual "
+        << DebugString(tensor->getType());
     ExpectTrtDimsEqualsArray({3, 10}, tensor->getDimensions());
-    EXPECT_EQ(TfDataTypeToTrt(dtype), tensor->getType());
   }
 }
 
