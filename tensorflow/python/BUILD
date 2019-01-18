@@ -213,7 +213,6 @@ py_library(
         ":pywrap_tensorflow",
         ":util",
         "//tensorflow/core:protos_all_py",
-        "@absl_py//absl:app",
         "@absl_py//absl/flags",
         "@six_archive//:six",
     ],
@@ -234,10 +233,7 @@ py_library(
     name = "platform_test",
     srcs = ["platform/googletest.py"],
     srcs_version = "PY2AND3",
-    deps = [
-        ":platform_benchmark",
-        "@absl_py//absl/testing:absltest",
-    ],
+    deps = [":platform_benchmark"],
 )
 
 tf_py_test(
@@ -675,6 +671,7 @@ py_library(
     srcs_version = "PY2AND3",
     deps = [
         ":common_shapes",
+        ":composite_tensor",
         ":cpp_shape_inference_proto_py",
         ":errors",
         ":framework_fast_tensor_util",
@@ -1000,9 +997,36 @@ py_library(
     srcs = ["framework/sparse_tensor.py"],
     srcs_version = "PY2AND3",
     deps = [
+        ":composite_tensor",
         ":dtypes",
         ":framework_ops",
         ":tensor_util",
+    ],
+)
+
+py_library(
+    name = "composite_tensor",
+    srcs = ["framework/composite_tensor.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":dtypes",
+        ":framework_ops",
+        ":tensor_util",
+    ],
+)
+
+py_test(
+    name = "framework_composite_tensor_test",
+    srcs = ["framework/composite_tensor_test.py"],
+    main = "framework/composite_tensor_test.py",
+    srcs_version = "PY2AND3",
+    deps = [
+        ":composite_tensor",
+        ":framework",
+        ":framework_for_generated_wrappers",
+        ":framework_test_lib",
+        ":platform_test",
+        "//tensorflow/core:protos_all_py",
     ],
 )
 
