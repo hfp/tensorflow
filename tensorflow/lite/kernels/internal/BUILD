@@ -46,7 +46,6 @@ cc_library(
     ],
     deps = [
         "//tensorflow/lite/kernels:op_macros",
-        "@com_google_absl//absl/base:core_headers",
     ],
 )
 
@@ -60,7 +59,6 @@ cc_library(
     ],
     deps = [
         "//tensorflow/lite/kernels:op_macros",
-        "@com_google_absl//absl/base:core_headers",
     ],
 )
 
@@ -407,6 +405,7 @@ cc_library(
         "//tensorflow/lite/c:c_api_internal",
         "//tensorflow/lite/kernels:activation_functor",
         "//tensorflow/lite/kernels:op_macros",
+        "//tensorflow/lite/kernels/internal:types",
     ],
 )
 
@@ -546,7 +545,6 @@ cc_library(
     }),
     deps = [
         ":types",
-        "//tensorflow/lite:string",
     ],
 )
 

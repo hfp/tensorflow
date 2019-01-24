@@ -68,13 +68,16 @@ class MutableGraphView : public internal::GraphViewInternal<GraphDef, NodeDef> {
   // it can have edges to the nodes that are not in it, however after adding
   // it to the underlying graph, final graph must be valid.
   //
-  // TODO(ezhulenev): Currently it will fail if subgraph has non-empty function
-  // library. Add support for adding new functions from the subgraph function
-  // library into the underlying graph.
+  // If subgraph function library is not empty, all new functions will be added
+  // to the graph. Functions that appear with the same name in both subgraph and
+  // the graph represented by *this, must have identical function definitions.
+  //
+  // IMPORTANT: All nodes and functions of the given subgraph moved into the
+  // underlying graph, which leaves subgraph in valid but undefined state.
   Status AddSubgraph(GraphDef&& subgraph);
 
-  // Updates all fanouts (input ports fetching output tensors) from `from_node`
-  // to the `to_node`, including control dependencies.
+  // Updates all fanouts (input ports fetching output tensors) from
+  // `from_node_name` to the `to_node_name`, including control dependencies.
   //
   // Example: We have 3 nodes that use `bar` node output tensors as inputs:
   //   1. foo1(bar:0, bar:1, other:0)
@@ -85,7 +88,8 @@ class MutableGraphView : public internal::GraphViewInternal<GraphDef, NodeDef> {
   //   1. foo1(new_bar:0, new_bar:1, other:0)
   //   2. foo2(new_bar:1, other:1)
   //   3. foo3(other:2, ^new_bar)
-  Status UpdateFanouts(absl::string_view from_node, absl::string_view to_node);
+  Status UpdateFanouts(absl::string_view from_node_name,
+                       absl::string_view to_node_name);
 
   // Adds regular fanin `fanin` to node `node_name`. If the node or fanin do not
   // exist in the graph, nothing will be modified in the graph. Otherwise fanin

@@ -47,7 +47,6 @@ tensorflow/third_party/toolchains/preconfig/ubuntu14.04/cuda10.0-cudnn7/cuda/BUI
 tensorflow/third_party/toolchains/preconfig/ubuntu14.04/gcc-nvcc-cuda10.0/BUILD
 tensorflow/third_party/toolchains/preconfig/ubuntu14.04/cuda9.0-cudnn7/cuda/build_defs.bzl
 tensorflow/third_party/toolchains/preconfig/ubuntu14.04/cuda9.0-cudnn7/cuda/BUILD
-tensorflow/third_party/toolchains/preconfig/ubuntu14.04/nccl2/BUILD
 tensorflow/third_party/toolchains/preconfig/generate/workspace.bzl
 tensorflow/third_party/toolchains/preconfig/generate/containers.bzl
 tensorflow/third_party/toolchains/preconfig/generate/generate.bzl
@@ -148,7 +147,6 @@ tensorflow/third_party/systemlibs/cython.BUILD
 tensorflow/third_party/systemlibs/double_conversion.BUILD
 tensorflow/third_party/systemlibs/zlib.BUILD
 tensorflow/third_party/systemlibs/jsoncpp.BUILD
-tensorflow/third_party/systemlibs/enum34.BUILD
 tensorflow/third_party/systemlibs/re2.BUILD
 tensorflow/third_party/systemlibs/lmdb.BUILD
 tensorflow/third_party/systemlibs/googleapis.BUILD
@@ -214,6 +212,7 @@ tensorflow/third_party/git/BUILD.tpl
 tensorflow/third_party/git/BUILD
 tensorflow/third_party/git/git_configure.bzl
 tensorflow/third_party/protobuf/BUILD
+tensorflow/third_party/enum34.BUILD
 tensorflow/third_party/tflite_mobilenet.BUILD
 tensorflow/third_party/py/BUILD
 tensorflow/third_party/py/BUILD.tpl

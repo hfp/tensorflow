@@ -55,7 +55,11 @@ void GetAsymmetricQuantizationParams(
   min = std::min(static_cast<float>(min), 0.0f);
   max = std::max(static_cast<float>(max), 0.0f);
   const float scale = (max - min) / (quant_max_float - quant_min_float);
-  const float zero_point_from_min = quant_min_float - min / scale;
+  // Scale can be zero if min and max are exactly 0.0f.
+  float zero_point_from_min = quant_min_float;
+  if (scale != 0) {
+    zero_point_from_min = quant_min_float - min / scale;
+  }
   int64_t zero_point;
   if (zero_point_from_min < quant_min_float) {
     zero_point = static_cast<int64_t>(quant_min);
@@ -123,9 +127,6 @@ void SymmetricPerChannelQuantization(const float* const input,
   }
 
   // Quantize the values.
-  const uint64_t num_elements_per_channel =
-      output_scales->size() / channel_dim_size;
-  std::vector<int8_t> quantized_buffer(num_elements_per_channel);
   memset(indices, 0, 4 * sizeof(int));
   for (indices[0] = 0; indices[0] < dimension[0]; indices[0]++) {
     for (indices[1] = 0; indices[1] < dimension[1]; indices[1]++) {

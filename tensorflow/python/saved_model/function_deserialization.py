@@ -97,6 +97,30 @@ def recreate_concrete_function(saved_concrete_function, concrete_functions):
   return concrete_function
 
 
+class RestoredFunction(def_function.Function):
+  """Wrapper class for a function that has been restored from saved state.
+
+  See `def_function.Function`.
+  """
+
+  def __init__(self, python_function, name, function_spec, concrete_functions):
+    # TODO(mdan): We may enable autograph once exceptions are supported.
+    super(RestoredFunction, self).__init__(
+        python_function, name, autograph=False)
+    self._concrete_functions = concrete_functions
+    # TODO(vbardiovsky): This does not propagate to stateful and stateless
+    # functions of the RestoredFunction, which will have seen only defunned
+    # restored_function_body(*args, **kwargs). Therefore get_concrete_function()
+    # called on RestoredFunction will not work properly.
+    self._function_spec = function_spec
+
+  def _list_all_concrete_functions_for_serialization(self):
+    return self._concrete_functions
+
+  def get_concrete_function(self, *args, **kwargs):
+    raise NotImplementedError()
+
+
 def recreate_function(saved_function, concrete_functions):
   """Creates a `Function` from a `SavedFunction`.
 
@@ -116,22 +140,24 @@ def recreate_function(saved_function, concrete_functions):
   function_spec = _deserialize_function_spec(saved_function.function_spec,
                                              coder)
 
-  # TODO(mdan): We may enable autograph once exceptions are supported.
-  @def_function.function(autograph=False)
-  def restored_function(*args, **kwargs):
+  def restored_function_body(*args, **kwargs):
     """Calls a restored function."""
     # TODO(allenl): Functions saved with input_signatures should revive with
     # input_signatures.
+    try:
+      canonicalized_inputs = function_spec.canonicalize_function_inputs(
+          *args, **kwargs)
+    except ValueError as e:
+      raise ValueError(
+          "Cannot canonicalize input args %r and kwargs %r. Error: %r." %
+          (args, kwargs, e))
+
+    debug_considered_signatures = []
     for concrete_function in saved_function.concrete_function:
       function_obj = concrete_functions[concrete_function.name]
       canonicalized_original_inputs = coder.decode_proto(
           concrete_function.canonicalized_input_signature)
-
-      try:
-        canonicalized_inputs = function_spec.canonicalize_function_inputs(
-            *args, **kwargs)
-      except ValueError:
-        continue
+      debug_considered_signatures.append(canonicalized_original_inputs)
 
       if _inputs_compatible(canonicalized_inputs,
                             canonicalized_original_inputs):
@@ -140,10 +166,14 @@ def recreate_function(saved_function, concrete_functions):
         return function_obj._call_flat(filtered_inputs)  # pylint: disable=protected-access
 
     raise AssertionError(
-        "Could not find matching function to call for args %r and kwargs %r" %
-        (args, kwargs))
+        "Could not find matching function to call for canonicalized inputs %r. "
+        "Only existing signatures are %r."
+        % (canonicalized_inputs, debug_considered_signatures))
 
-  return restored_function
+  cfs = [concrete_functions[f.name] for f in saved_function.concrete_function]
+
+  return RestoredFunction(restored_function_body,
+                          restored_function_body.__name__, function_spec, cfs)
 
 
 def load_function_def_library(library):
@@ -205,8 +235,7 @@ def _sort_function_defs(library):
         ready.append(dest)
 
   if len(output) != len(library.function):
-    loaded = set([x.signature.name for x in output])
-    failed_to_resolve = sorted(set(in_count.keys()) - loaded)
+    failed_to_resolve = sorted(set(in_count.keys()) - set(output))
     raise ValueError("There is a cyclic-dependency between functions. ",
                      "Could not resolve %r." % (failed_to_resolve,))
 
