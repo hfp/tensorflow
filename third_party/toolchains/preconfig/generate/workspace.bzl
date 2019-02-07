@@ -1,10 +1,7 @@
 load(
-    "@io_bazel_rules_docker//repositories:repositories.bzl",
-    container_repositories = "repositories",
-)
-load(
     "@io_bazel_rules_docker//container:container.bzl",
     "container_pull",
+    container_repositories = "repositories",
 )
 load(":containers.bzl", "container_digests")
 
