@@ -118,10 +118,10 @@ def tf_workspace(path_prefix = "", tf_repo_name = ""):
     native.new_http_archive(
         name = "mkl_dnn",
         build_file = clean_dep("//third_party/mkl_dnn:mkldnn.BUILD"),
-        sha256 = "986207cb86cfc7e4090385125f5d67f7142cb620ffc24cc90d351ea9fe0d3948",
-        strip_prefix = "mkl-dnn-9c5604ddc7ee4110850835a81e2086aa5028f080",
+        sha256 = "d4859af21c61e813ae98b9bca92854053a40c9f3e06fe55589d651db97c9e781",
+        strip_prefix = "mkl-dnn-195169c704d8dc16b681c07ffcbfb0e9123f5661",
         urls = [
-            "https://github.com/intel/mkl-dnn/archive/9c5604ddc7ee4110850835a81e2086aa5028f080.tar.gz",
+            "https://github.com/intel/mkl-dnn/archive/195169c704d8dc16b681c07ffcbfb0e9123f5661.tar.gz",
         ],
     )
 
