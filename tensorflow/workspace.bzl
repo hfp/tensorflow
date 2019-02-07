@@ -83,11 +83,11 @@ def tf_workspace(path_prefix = "", tf_repo_name = ""):
     mkl_repository(
         name = "mkl_linux",
         build_file = clean_dep("//third_party/mkl:mkl.BUILD"),
-        sha256 = "6bafc2c794961bd425683adb657b02ffc4296f0db6049c348d7c21b723f6ab15",
-        strip_prefix = "mkl-dnn-3439371cb7ca17456f0962f288dd17086aed0560",
+        sha256 = "2701248d90c5571432e1183d50102f84b0a819af2bf2666d531ab713622afc60",
+        strip_prefix = "mkl-dnn-188710752c155bc73c3d146f16199ed6af35cd24",
         urls = [
             "https://mirror.bazel.build/github.com/intel/mkl-dnn/releases/download/v0.17-rc/mklml_lnx_2019.0.1.20180928.tgz",
-            "https://github.com/intel/mkl-dnn/archive/3439371cb7ca17456f0962f288dd17086aed0560.tar.gz",
+            "https://github.com/intel/mkl-dnn/archive/188710752c155bc73c3d146f16199ed6af35cd24.tar.gz",
         ],
     )
     mkl_repository(
@@ -140,10 +140,10 @@ def tf_workspace(path_prefix = "", tf_repo_name = ""):
     native.new_http_archive(
         name = "eigen_archive",
         build_file = clean_dep("//third_party:eigen.BUILD"),
-        sha256 = "94413454937de971690858f1300a35ff8d34dd0b7718d23b07fc282f1bd55fc9",
-        strip_prefix = "eigen-53946f0c767147fcd8d55a4bbc0542c1828b9d76",
+        sha256 = "94bb82ad8ac788976c637d6f3cb60b86f464206576add0018ff858848559a903",
+        strip_prefix = "eigen-c4ac283e7f108bb07be35bf16240d13de5d20baf",
         urls = [
-            "https://github.com/hfp/eigen/archive/53946f0c767147fcd8d55a4bbc0542c1828b9d76.zip",
+            "https://github.com/hfp/eigen/archive/c4ac283e7f108bb07be35bf16240d13de5d20baf.zip",
         ],
     )
 
@@ -163,10 +163,10 @@ def tf_workspace(path_prefix = "", tf_repo_name = ""):
     native.new_http_archive(
         name = "libxsmm_archive",
         build_file = clean_dep("//third_party:libxsmm.BUILD"),
-        sha256 = "1f6c25c9056c072d457560b0a572376b610d807b13bb634db6745c11f204ca41",
-        strip_prefix = "libxsmm-5dfe583408282f4fd1a4e2040bae02466a1f1545",
+        sha256 = "7b90683bc65d8a7abf1c0b13715723b897a70bca5563430086dab609d4e94c60",
+        strip_prefix = "libxsmm-6f1bc9fc83e351d969e70b30c50b7fb5a1eba4ba",
         urls = [
-            "https://github.com/hfp/libxsmm/archive/5dfe583408282f4fd1a4e2040bae02466a1f1545.zip",
+            "https://github.com/hfp/libxsmm/archive/6f1bc9fc83e351d969e70b30c50b7fb5a1eba4ba.zip",
         ],
     )
 
