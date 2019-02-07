@@ -2175,6 +2175,16 @@ tf_kernel_library(
 )
 
 cc_library(
+    name = "string_view_variant_wrapper",
+    hdrs = ["string_view_variant_wrapper.h"],
+    deps = [
+        "//tensorflow/core:framework",
+        "//tensorflow/core:protos_all_cc",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_library(
     name = "checkpoint_ops",
     deps = [
         ":generate_vocab_remapping_op",
@@ -3653,27 +3663,6 @@ tf_cc_test(
         "//tensorflow/core:framework",
         "//tensorflow/core:lib",
         "//tensorflow/core:ops",
-        "//tensorflow/core:test",
-        "//tensorflow/core:test_main",
-        "//tensorflow/core:testlib",
-    ],
-)
-
-tf_cc_test(
-    name = "shape_op_test",
-    srcs = ["shape_op_test.cc"],
-    deps = [
-        ":array",
-        ":ops_testutil",
-        ":ops_util",
-        "//tensorflow/cc:cc_ops",
-        "//tensorflow/cc:client_session",
-        "//tensorflow/core:core_cpu",
-        "//tensorflow/core:direct_session",
-        "//tensorflow/core:framework",
-        "//tensorflow/core:lib",
-        "//tensorflow/core:ops",
-        "//tensorflow/core:protos_all_cc",
         "//tensorflow/core:test",
         "//tensorflow/core:test_main",
         "//tensorflow/core:testlib",
@@ -5626,6 +5615,7 @@ filegroup(
         "gemm_functors.h",
         "image_resizer_state.h",
         "initializable_lookup_table.h",
+        "logging_ops.h",
         "lookup_table_init_op.h",
         "lookup_table_op.h",
         "lookup_util.h",
@@ -6571,6 +6561,30 @@ tf_cc_test(
     ],
 )
 
+tf_cc_test_mkl(
+    name = "mkl_quantized_concat_op_test",
+    size = "small",
+    srcs = ["mkl_quantized_concat_op_test.cc"],
+    deps = [
+        ":mkl_concat_op",
+        ":ops_testutil",
+        ":ops_util",
+        ":quantization_utils",
+        ":quantized_ops",
+        "//tensorflow/core:array_ops_op_lib",
+        "//tensorflow/core:core_cpu",
+        "//tensorflow/core:framework",
+        "//tensorflow/core:lib",
+        "//tensorflow/core:math_ops_op_lib",
+        "//tensorflow/core:mkl_array_ops_op_lib",
+        "//tensorflow/core:nn_ops_op_lib",
+        "//tensorflow/core:protos_all_cc",
+        "//tensorflow/core:test",
+        "//tensorflow/core:test_main",
+        "//tensorflow/core:testlib",
+    ],
+)
+
 tf_cc_test(
     name = "quantized_batch_norm_op_test",
     size = "small",
@@ -6819,6 +6833,7 @@ tf_cc_test_mkl(
     name = "mkl_conv_ops_test",
     size = "small",
     srcs = ["mkl_conv_ops_test.cc"],
+    tags = ["no_mac"],
     deps = [
         ":ops_testutil",
         ":ops_util",
@@ -7075,6 +7090,7 @@ tf_kernel_library(
         "//tensorflow/core/util/proto:descriptors",
         "//tensorflow/core/util/proto:proto_utils",
         "//third_party/eigen3",
+        "@com_google_absl//absl/container:flat_hash_map",
     ],
 )
 
@@ -7154,5 +7170,14 @@ cc_header_only_library(
     name = "cwise_lib_hdrs",
     deps = [
         ":cwise_lib",
+    ],
+)
+
+# Library to link with when compiling the quantize and dequantize kernels directly,
+# e.g. for selective registration.
+cc_header_only_library(
+    name = "quantize_and_dequantize_op_hdrs",
+    deps = [
+        ":quantize_and_dequantize_op",
     ],
 )
