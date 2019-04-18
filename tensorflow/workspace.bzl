@@ -143,7 +143,7 @@ def tf_workspace(path_prefix = "", tf_repo_name = ""):
         ],
     )
 
-    native.new_http_archive(
+    tf_http_archive(
         name = "eigen_archive",
         build_file = clean_dep("//third_party:eigen.BUILD"),
         sha256 = "abd644d5b5b798d0227c1c603adeb4a4225d2428959553bd67b986f6eb9e0083",
@@ -164,7 +164,7 @@ def tf_workspace(path_prefix = "", tf_repo_name = ""):
         ],
     )
 
-    native.new_http_archive(
+    tf_http_archive(
         name = "libxsmm_archive",
         build_file = clean_dep("//third_party:libxsmm.BUILD"),
         sha256 = "8826bb478283ab28941ba021667acb7b01d9f0c11fcf1ed15e04700290d23654",

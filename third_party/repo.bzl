@@ -16,6 +16,8 @@
 
 _SINGLE_URL_WHITELIST = depset([
     "arm_compiler",
+	"eigen_archive",
+    "libxsmm_archive",
 ])
 
 def _is_windows(ctx):
