@@ -55,9 +55,8 @@ int TfLiteTypeToPyArrayType(TfLiteType tf_lite_type) {
   return NPY_NOTYPE;
 }
 
-TfLiteType TfLiteTypeFromPyArray(PyArrayObject* array) {
-  int pyarray_type = PyArray_TYPE(array);
-  switch (pyarray_type) {
+TfLiteType TfLiteTypeFromPyType(int py_type) {
+  switch (py_type) {
     case NPY_FLOAT32:
       return kTfLiteFloat32;
     case NPY_INT32:
@@ -83,11 +82,16 @@ TfLiteType TfLiteTypeFromPyArray(PyArrayObject* array) {
   return kTfLiteNoType;
 }
 
+TfLiteType TfLiteTypeFromPyArray(PyArrayObject* array) {
+  int pyarray_type = PyArray_TYPE(array);
+  return TfLiteTypeFromPyType(pyarray_type);
+}
+
 #if PY_VERSION_HEX >= 0x03030000
 bool FillStringBufferFromPyUnicode(PyObject* value,
                                    DynamicBuffer* dynamic_buffer) {
   Py_ssize_t len = -1;
-  char* buf = PyUnicode_AsUTF8AndSize(value, &len);
+  const char* buf = PyUnicode_AsUTF8AndSize(value, &len);
   if (buf == NULL) {
     PyErr_SetString(PyExc_ValueError, "PyUnicode_AsUTF8AndSize() failed.");
     return false;
@@ -158,6 +162,22 @@ bool FillStringBufferWithPyArray(PyObject* value,
                "Cannot use numpy array of type %d for string tensor.",
                PyArray_TYPE(array));
   return false;
+}
+
+int ConvertFromPyString(PyObject* obj, char** data, Py_ssize_t* length) {
+#if PY_MAJOR_VERSION >= 3
+  return PyBytes_AsStringAndSize(obj, data, length);
+#else
+  return PyString_AsStringAndSize(obj, data, length);
+#endif
+}
+
+PyObject* ConvertToPyString(const char* data, size_t length) {
+#if PY_MAJOR_VERSION >= 3
+  return PyBytes_FromStringAndSize(data, length);
+#else
+  return PyString_FromStringAndSize(data, length);
+#endif
 }
 
 }  // namespace python_utils

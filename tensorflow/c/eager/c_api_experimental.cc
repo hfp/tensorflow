@@ -17,6 +17,13 @@ limitations under the License.
 
 #include "tensorflow/c/c_api.h"
 #include "tensorflow/c/eager/c_api_internal.h"
+#include "tensorflow/c/tf_status_helper.h"
+#include "tensorflow/core/lib/monitoring/counter.h"
+#include "tensorflow/core/lib/monitoring/gauge.h"
+#include "tensorflow/core/lib/monitoring/sampler.h"
+#include "tensorflow/core/lib/strings/strcat.h"
+#include "tensorflow/core/platform/mutex.h"
+#include "tensorflow/core/profiler/rpc/client/capture_profile.h"
 #include "tensorflow/core/profiler/rpc/profiler_server.h"
 
 using tensorflow::string;
@@ -25,8 +32,12 @@ void TFE_OpConsumeInput(TFE_Op* op, TFE_TensorHandle* h, TF_Status* status) {
   op->operation.ConsumeInput(h->handle);
 }
 
-TFE_Profiler* TFE_NewProfiler(TFE_Context* ctx) {
+TFE_Profiler* TFE_NewProfiler(TFE_ProfilerContext* ctx) {
   return new TFE_Profiler(ctx);
+}
+
+bool TFE_ProfilerIsOk(TFE_Profiler* profiler) {
+  return profiler->profiler->Status().ok();
 }
 
 void TFE_DeleteProfiler(TFE_Profiler* profiler) { delete profiler; }
@@ -34,7 +45,7 @@ void TFE_DeleteProfiler(TFE_Profiler* profiler) { delete profiler; }
 void TFE_ProfilerSerializeToString(TFE_Context* ctx, TFE_Profiler* profiler,
                                    TF_Buffer* buf, TF_Status* status) {
   TFE_ContextAsyncWait(ctx, status);
-  if (!status->status.ok()) return;
+  if (TF_GetCode(status) != TF_OK) return;
   string content;
   status->status = profiler->profiler->SerializeToString(&content);
   void* data = tensorflow::port::Malloc(content.length());
@@ -46,7 +57,164 @@ void TFE_ProfilerSerializeToString(TFE_Context* ctx, TFE_Profiler* profiler,
   };
 }
 
-void TFE_StartProfilerServer(TFE_Context* ctx, int port) {
-  auto server_thread = tensorflow::StartProfilerServer(&ctx->context, port);
-  ctx->context.AddChildThread(std::move(server_thread));
+TFE_ProfilerContext* TFE_NewProfilerContext() {
+  return new TFE_ProfilerContext;
+}
+
+void TFE_ProfilerContextSetEagerContext(TFE_ProfilerContext* profiler_context,
+                                        TFE_Context* eager_context) {
+  profiler_context->profiler_context.eager_context = &eager_context->context;
+}
+
+void TFE_DeleteProfilerContext(TFE_ProfilerContext* profiler_context) {
+  delete profiler_context;
+}
+
+void TFE_StartProfilerServer(TFE_ProfilerContext* context, int port) {
+  // Release child thread intentionally. The child thread can be terminate by
+  // terminating the main thread.
+  tensorflow::StartProfilerServer(&context->profiler_context, port).release();
+}
+
+void TFE_ContextEnableGraphCollection(TFE_Context* ctx) {
+  ctx->context.SetShouldStoreGraphs(true);
+}
+
+void TFE_ContextDisableGraphCollection(TFE_Context* ctx) {
+  ctx->context.SetShouldStoreGraphs(false);
+}
+
+bool TFE_ProfilerClientStartTracing(const char* service_addr,
+                                    const char* logdir, const char* worker_list,
+                                    bool include_dataset_ops, int duration_ms,
+                                    int num_tracing_attempts) {
+  tensorflow::Status s =
+      tensorflow::profiler::client::ValidateHostPortPair(service_addr);
+  if (!s.ok()) {
+    return false;
+  }
+  s = tensorflow::profiler::client::StartTracing(
+      service_addr, logdir, worker_list, include_dataset_ops, duration_ms,
+      num_tracing_attempts);
+  return s.ok();
+}
+
+static tensorflow::mutex gauges_map_lock(tensorflow::LINKER_INITIALIZED);
+
+static std::unordered_map<string,
+                          tensorflow::monitoring::Gauge<tensorflow::int64, 1>*>*
+get_gauges_map() EXCLUSIVE_LOCKS_REQUIRED(gauges_map_lock) {
+  static std::unordered_map<
+      string, tensorflow::monitoring::Gauge<tensorflow::int64, 1>*>*
+      gauges_map = new std::unordered_map<
+          string, tensorflow::monitoring::Gauge<tensorflow::int64, 1>*>;
+  return gauges_map;
+}
+
+static tensorflow::mutex samplers_map_lock(tensorflow::LINKER_INITIALIZED);
+
+static std::unordered_map<string, tensorflow::monitoring::Sampler<1>*>*
+get_samplers_map() EXCLUSIVE_LOCKS_REQUIRED(samplers_map_lock) {
+  static std::unordered_map<string, tensorflow::monitoring::Sampler<1>*>*
+      samplers_map =
+          new std::unordered_map<string, tensorflow::monitoring::Sampler<1>*>;
+  return samplers_map;
+}
+
+void TFE_MonitoringSetGauge(const char* name, const char* label,
+                            int64_t value) {
+  tensorflow::mutex_lock l(gauges_map_lock);
+  auto gauges_map = get_gauges_map();
+  if (gauges_map->find(name) == gauges_map->end()) {
+    gauges_map->emplace(
+        name, tensorflow::monitoring::Gauge<tensorflow::int64, 1>::New(
+                  name,
+                  tensorflow::strings::StrCat(
+                      name, " :Gauge metric collected from Python API."),
+                  "metric_descriptor"));
+  }
+  gauges_map->at(name)->GetCell(label)->Set(value);
+}
+
+void TFE_MonitoringAddSampler(const char* name, const char* label,
+                              double value) {
+  tensorflow::mutex_lock l(samplers_map_lock);
+  auto samplers_map = get_samplers_map();
+  if (samplers_map->find(name) == samplers_map->end()) {
+    samplers_map->emplace(
+        name, tensorflow::monitoring::Sampler<1>::New(
+                  {name,
+                   tensorflow::strings::StrCat(
+                       name, " :Counter metric collected from Python API."),
+                   "metric_descriptor"},
+                  {tensorflow::monitoring::Buckets::Exponential(1, 2, 30)}));
+  }
+  samplers_map->at(name)->GetCell(label)->Add(value);
+}
+
+void TFE_MonitoringCounterCellIncrementBy(TFE_MonitoringCounterCell* cell,
+                                          int64_t value) {
+  cell->cell.IncrementBy(value);
+}
+
+int64_t TFE_MonitoringCounterCellValue(TFE_MonitoringCounterCell* cell) {
+  return cell->cell.value();
+}
+
+TFE_MonitoringCounter0* TFE_MonitoringNewCounter0(const char* name,
+                                                  TF_Status* status,
+                                                  const char* description) {
+  auto* result = new TFE_MonitoringCounter0({name, description});
+  Set_TF_Status_from_Status(status, result->counter->GetStatus());
+  return result;
+}
+
+void TFE_MonitoringDeleteCounter0(TFE_MonitoringCounter0* counter) {
+  delete counter;
+}
+
+TFE_MonitoringCounterCell* TFE_MonitoringGetCellCounter0(
+    TFE_MonitoringCounter0* counter) {
+  return static_cast<TFE_MonitoringCounterCell*>(
+      static_cast<void*>(counter->counter->GetCell()));
+}
+
+TFE_MonitoringCounter1* TFE_MonitoringNewCounter1(const char* name,
+                                                  TF_Status* status,
+                                                  const char* description,
+                                                  const char* label1) {
+  auto* result = new TFE_MonitoringCounter1({name, description, label1});
+  Set_TF_Status_from_Status(status, result->counter->GetStatus());
+  return result;
+}
+
+void TFE_MonitoringDeleteCounter1(TFE_MonitoringCounter1* counter) {
+  delete counter;
+}
+
+TFE_MonitoringCounterCell* TFE_MonitoringGetCellCounter1(
+    TFE_MonitoringCounter1* counter, const char* label1) {
+  return static_cast<TFE_MonitoringCounterCell*>(
+      static_cast<void*>(counter->counter->GetCell(label1)));
+}
+
+TFE_MonitoringCounter2* TFE_MonitoringNewCounter2(const char* name,
+                                                  TF_Status* status,
+                                                  const char* description,
+                                                  const char* label1,
+                                                  const char* label2) {
+  auto* result =
+      new TFE_MonitoringCounter2({name, description, label1, label2});
+  Set_TF_Status_from_Status(status, result->counter->GetStatus());
+  return result;
+}
+
+void TFE_MonitoringDeleteCounter2(TFE_MonitoringCounter2* counter) {
+  delete counter;
+}
+
+TFE_MonitoringCounterCell* TFE_MonitoringGetCellCounter2(
+    TFE_MonitoringCounter2* counter, const char* label1, const char* label2) {
+  return static_cast<TFE_MonitoringCounterCell*>(
+      static_cast<void*>(counter->counter->GetCell(label1, label2)));
 }

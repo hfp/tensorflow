@@ -46,6 +46,7 @@ cc_library(
         "//tensorflow/core:lib",
         # Required to be able to overload TensorResponse parsing.
         "//tensorflow/core/distributed_runtime:tensor_coding",
+        "//tensorflow/core:lib_internal",
     ],
 )
 
@@ -164,9 +165,9 @@ cc_library(
     srcs = ["grpc_response_cache.cc"],
     hdrs = ["grpc_response_cache.h"],
     deps = [
-        ":grpc_util",
+        "//tensorflow/core:framework",
         "//tensorflow/core:lib",
-        "@com_google_absl//absl/time",
+        "@com_google_absl//absl/types:optional",
     ],
 )
 
@@ -189,14 +190,12 @@ tf_cuda_library(
         "//tensorflow/core:protos_all_cc",
         "//tensorflow/core:worker_proto_cc",
         "//tensorflow/core/distributed_runtime:graph_mgr",
-        "//tensorflow/core/distributed_runtime:recent_request_ids",
         "//tensorflow/core/distributed_runtime:rendezvous_mgr_interface",
         "//tensorflow/core/distributed_runtime:worker",
         "//tensorflow/core/distributed_runtime:worker_cache",
         "//tensorflow/core/distributed_runtime:worker_env",
         "//tensorflow/core/distributed_runtime:worker_session",
         "@com_google_absl//absl/container:flat_hash_map",
-        "@com_google_absl//absl/time",
     ],
 )
 
@@ -341,8 +340,9 @@ tf_cc_binary(
     ],
 )
 
-tf_cc_binary(
-    name = "grpc_testlib_server",
+# Library version of grpc_testlib_server, to allow for custom testlib servers.
+cc_library(
+    name = "grpc_testlib_server_main",
     testonly = 1,
     srcs = [
         "grpc_testlib_server.cc",
@@ -368,6 +368,13 @@ tf_cc_binary(
         "//tensorflow/core/kernels:reduction_ops",
         "//tensorflow/core/kernels:variable_ops",
     ],
+    alwayslink = 1,
+)
+
+tf_cc_binary(
+    name = "grpc_testlib_server",
+    testonly = 1,
+    deps = [":grpc_testlib_server_main"],
 )
 
 tf_cuda_library(
@@ -378,7 +385,7 @@ tf_cuda_library(
     data = [
         ":grpc_testlib_server",
     ],
-    visibility = ["//tensorflow:__subpackages__"],
+    visibility = ["//tensorflow:internal"],
     deps = [
         ":grpc_session",
         "//tensorflow/core:core_cpu",
@@ -408,6 +415,7 @@ cc_library(
         "//tensorflow/core/distributed_runtime:local_master",
         "//tensorflow/core/distributed_runtime:master_interface",
         "//tensorflow/core/distributed_runtime:message_wrappers",
+        "//tensorflow/core/distributed_runtime:request_id",
     ],
     alwayslink = 1,
 )
@@ -420,7 +428,7 @@ tf_cuda_cc_tests(
         "rpc_rendezvous_mgr_test.cc",
     ],
     linkopts = select({
-        "//tensorflow:darwin": ["-headerpad_max_install_names"],
+        "//tensorflow:macos": ["-headerpad_max_install_names"],
         "//conditions:default": [],
     }),
     linkstatic = tf_kernel_tests_linkstatic(),

@@ -25,6 +25,7 @@ from tensorflow.python import keras
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.eager import context
 from tensorflow.python.eager import function
+from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import test_util as tf_test_util
 from tensorflow.python.keras import keras_parameterized
 from tensorflow.python.keras import testing_utils
@@ -45,6 +46,18 @@ class TestSequential(keras_parameterized.TestCase):
                                  kernel_constraint='max_norm'))
     self.assertEqual(len(model.layers), 3)
     self.assertEqual(len(model.weights), 2 * 2)
+    self.assertEqual(model.get_layer(name='dp').name, 'dp')
+
+  @keras_parameterized.run_all_keras_modes
+  def test_input_defined_first_layer(self):
+    model = keras.models.Sequential()
+    model.add(keras.Input(shape=(2,), name='input_layer'))
+    model.add(keras.layers.Dense(1))
+    model.add(keras.layers.Dropout(0.3, name='dp'))
+    model.add(keras.layers.Dense(2, kernel_regularizer='l2',
+                                 kernel_constraint='max_norm'))
+    self.assertLen(model.layers, 3)
+    self.assertLen(model.weights, 2 * 2)
     self.assertEqual(model.get_layer(name='dp').name, 'dp')
 
   @keras_parameterized.run_all_keras_modes
@@ -353,6 +366,16 @@ class TestSequential(keras_parameterized.TestCase):
       with self.assertRaisesRegexp(ValueError,
                                    'expected min_ndim=2, found ndim=0'):
         model(1.0)
+
+  @keras_parameterized.run_all_keras_modes
+  def test_string_input(self):
+    seq = keras.Sequential([
+        keras.layers.InputLayer(input_shape=(1,), dtype=dtypes.string),
+        keras.layers.Lambda(lambda x: x[0])
+    ])
+    seq.run_eagerly = testing_utils.should_run_eagerly()
+    preds = seq.predict([['tensorflow eager']])
+    self.assertEqual(preds.shape, (1,))
 
 
 class TestSequentialEagerIntegration(keras_parameterized.TestCase):
