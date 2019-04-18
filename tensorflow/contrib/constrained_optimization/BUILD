@@ -43,9 +43,8 @@ py_test(
     srcs = ["python/candidates_test.py"],
     srcs_version = "PY2AND3",
     tags = [
-        # TODO(b/121223093): Re-enable this test after fixing "Distribution
-        # should match known solution" errors.
-        "no_mac",
+        # TODO(b/129496144): Re-enable MSAN test.
+        "nomsan",
     ],
     deps = [
         ":constrained_optimization",

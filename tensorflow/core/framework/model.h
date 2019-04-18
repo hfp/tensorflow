@@ -160,6 +160,9 @@ class Node {
     return inputs_;
   }
 
+  // Returns a longer node name that is guaranteed to be unique.
+  string long_name() const { return strings::StrCat(name_, "(id:", id_, ")"); }
+
   // Returns the node name.
   const string& name() const { return name_; }
 
@@ -212,12 +215,12 @@ class Node {
 
   // Collects tunable parameters in the subtree rooted in this node.
   void CollectTunableParameters(
-      std::vector<std::shared_ptr<Parameter>>* parameters) const
+      std::map<string, std::shared_ptr<Parameter>>* parameters) const
       LOCKS_EXCLUDED(mu_) {
     tf_shared_lock l(mu_);
     for (auto& pair : parameters_) {
       if (pair.second->state->tunable) {
-        parameters->push_back(pair.second);
+        parameters->insert(std::make_pair(long_name(), pair.second));
       }
     }
     for (auto& input : inputs_) {
@@ -247,10 +250,13 @@ class Node {
       LOCKS_EXCLUDED(mu_) {
     tf_shared_lock l(mu_);
     std::shared_ptr<Node> result = Clone(output);
-    result->buffered_bytes_ = buffered_bytes_;
-    result->processing_time_ = processing_time_;
-    result->num_elements_ = num_elements_;
-    result->parameters_ = parameters_;
+    {
+      mutex_lock l2(result->mu_);
+      result->buffered_bytes_ = buffered_bytes_;
+      result->processing_time_ = processing_time_;
+      result->num_elements_ = num_elements_;
+      result->parameters_ = parameters_;
+    }
     for (auto& input : inputs_) {
       result->add_input(input->Snapshot(result));
     }
@@ -359,16 +365,26 @@ std::shared_ptr<Node> MakeUnknownNode(Node::Args args);
 // implementation of `DatasetBase` and `DatasetBaseIterator` respectively.
 class Model {
  public:
-  Model() : collect_resource_usage_(false) {}
+  using NodeHook = std::function<void(std::shared_ptr<Node>)>;
+
+  // Creates a new model.
+  //
+  // The `remove_node_hook` argument can be used to specify functionality that
+  // should be invoked before a node is removed from the model. The hook can be
+  // used for dependency injection -- to allow the model to invoke functionality
+  // from modules that it could not depend on statically.
+  Model(NodeHook remove_node_hook)
+      : collect_resource_usage_(false),
+        remove_node_hook_(std::move(remove_node_hook)) {
+    DCHECK(remove_node_hook_ != nullptr);
+  }
 
   // Indicates whether to collect resource usage.
   bool collect_resource_usage() const { return collect_resource_usage_; }
 
   // Adds a node with the given name and given output.
-  virtual std::shared_ptr<Node> AddNode(Node::Factory factory,
-                                        const string& name,
-                                        const string& output_name)
-      LOCKS_EXCLUDED(mu_);
+  std::shared_ptr<Node> AddNode(Node::Factory factory, const string& name,
+                                const string& output_name) LOCKS_EXCLUDED(mu_);
 
   // Increments the processing time for the given node..
   void AddProcessingTime(const string& name, int64 delta) LOCKS_EXCLUDED(mu_);
@@ -378,6 +394,9 @@ class Model {
 
   // Records that a node has produced an element.
   void RecordElement(const string& name) LOCKS_EXCLUDED(mu_);
+
+  // Returns the number of elements that the input pipeline has produced.
+  int64 NumElements(const string& name) LOCKS_EXCLUDED(mu_);
 
   // Records that the given node has started work. If `stop_output` is set, it
   // also records that the output of the given node has stopped work.
@@ -390,9 +409,10 @@ class Model {
   // Removes the given node.
   void RemoveNode(const string& name) LOCKS_EXCLUDED(mu_);
 
- protected:
-  // Collects tunable parameters in the tree rooted in the given node.
-  std::vector<std::shared_ptr<Parameter>> CollectTunableParameters(
+ private:
+  // Collects tunable parameters in the tree rooted in the given node, returning
+  // a mapping from a (unique) node name to a tunable parameter.
+  std::map<string, std::shared_ptr<Parameter>> CollectTunableParameters(
       std::shared_ptr<Node> node);
 
   // Collects the output time for the given node.
@@ -416,6 +436,9 @@ class Model {
   // tunable parameter (because the information is used for for tuning the value
   // of the parameter) and never stops.
   std::atomic<bool> collect_resource_usage_;
+
+  // A hook invoked immediately before a node is removed from the model.
+  const NodeHook remove_node_hook_;
 };
 
 }  // namespace model

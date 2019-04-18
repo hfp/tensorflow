@@ -104,6 +104,10 @@ class SetVector {
 // for the 0 port (first output), only the node name is returned.
 string TensorIdToString(const TensorId& tensor_id);
 
+// Returns formatted string from SafeTensorId specific to grappler.
+// Specifically, for the 0 port (first output), only the node name is returned.
+string SafeTensorIdToString(const SafeTensorId& tensor_id);
+
 // True iff 'name' refers to a control inputs, i.e. a node name prefixed with
 // the ^ character.
 bool IsControlInput(const string& name);
@@ -241,6 +245,9 @@ string AsControlDependency(const string& node);
 
 // Returns true if the node is assigned to run on CPU device.
 bool NodeIsOnCpu(const NodeDef* node);
+
+// Returns true if the node is assigned to run on GPU device.
+bool NodeIsOnGpu(const NodeDef* node);
 
 // Returns the number of outputs of a node according to its OpDef. Note that
 // some of the outputs may be unconnected.
