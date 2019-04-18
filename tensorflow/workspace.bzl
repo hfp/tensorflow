@@ -143,15 +143,13 @@ def tf_workspace(path_prefix = "", tf_repo_name = ""):
         ],
     )
 
-    tf_http_archive(
+    native.new_http_archive(
         name = "eigen_archive",
         build_file = clean_dep("//third_party:eigen.BUILD"),
-        patch_file = clean_dep("//third_party/eigen3:gpu_packet_math.patch"),
-        sha256 = "8b3e1c0494af6b616ef3f2a107e093be1ea57c6a34f277edb2bdb1dbf3e3870a",
-        strip_prefix = "eigen-eigen-4fe5a1014743",
+        sha256 = "abd644d5b5b798d0227c1c603adeb4a4225d2428959553bd67b986f6eb9e0083",
+        strip_prefix = "eigen-6f88644eaacb64deb51deb422688c16fb5e0e5c4",
         urls = [
-            "http://mirror.tensorflow.org/bitbucket.org/eigen/eigen/get/4fe5a1014743.tar.gz",
-            "https://bitbucket.org/eigen/eigen/get/4fe5a1014743.tar.gz",
+            "https://github.com/hfp/eigen/archive/6f88644eaacb64deb51deb422688c16fb5e0e5c4.zip",
         ],
     )
 
@@ -166,14 +164,13 @@ def tf_workspace(path_prefix = "", tf_repo_name = ""):
         ],
     )
 
-    tf_http_archive(
+    native.new_http_archive(
         name = "libxsmm_archive",
         build_file = clean_dep("//third_party:libxsmm.BUILD"),
-        sha256 = "cd8532021352b4a0290d209f7f9bfd7c2411e08286a893af3577a43457287bfa",
-        strip_prefix = "libxsmm-1.9",
+        sha256 = "8826bb478283ab28941ba021667acb7b01d9f0c11fcf1ed15e04700290d23654",
+        strip_prefix = "libxsmm-af3f1fb6c6376ad7cf09b0a3ea5801bb17c1c591",
         urls = [
-            "http://mirror.tensorflow.org/github.com/hfp/libxsmm/archive/1.9.tar.gz",
-            "https://github.com/hfp/libxsmm/archive/1.9.tar.gz",
+            "https://github.com/hfp/libxsmm/archive/af3f1fb6c6376ad7cf09b0a3ea5801bb17c1c591.zip",
         ],
     )
 
