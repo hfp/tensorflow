@@ -71,7 +71,7 @@ class FillTriangular(bijector.Bijector):
       "TensorFlow Probability "
       "(https://github.com/tensorflow/probability). You "
       "should update all references to use `tfp.distributions` "
-      "instead of `tfp.distributions`.",
+      "instead of `tf.contrib.distributions`.",
       warn_once=True)
   def __init__(self,
                upper=False,
@@ -148,7 +148,7 @@ class FillTriangular(bijector.Bijector):
     "TensorFlow Probability "
     "(https://github.com/tensorflow/probability). You "
     "should update all references to use `tfp.distributions` "
-    "instead of `tfp.distributions`.",
+    "instead of `tf.contrib.distributions`.",
     warn_once=True)
 def vector_size_to_square_matrix_size(d, validate_args, name=None):
   """Convert a vector size to a matrix size."""

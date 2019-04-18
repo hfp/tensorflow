@@ -47,7 +47,7 @@ class AbsoluteValue(bijector.Bijector):
 
 
   ```python
-  tfd = tfp.distributions
+  tfd = tf.contrib.distributions
 
   abs = tfd.bijectors.AbsoluteValue()
 
@@ -77,7 +77,7 @@ class AbsoluteValue(bijector.Bijector):
       "TensorFlow Probability "
       "(https://github.com/tensorflow/probability). You "
       "should update all references to use `tfp.distributions` "
-      "instead of `tfp.distributions`.",
+      "instead of `tf.contrib.distributions`.",
       warn_once=True)
   def __init__(self, validate_args=False, name="absolute_value"):
     """Instantiates the `AbsoluteValue` bijector.

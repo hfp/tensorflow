@@ -132,7 +132,7 @@ class RealNVP(bijector.Bijector):
       "TensorFlow Probability "
       "(https://github.com/tensorflow/probability). You "
       "should update all references to use `tfp.distributions` "
-      "instead of `tfp.distributions`.",
+      "instead of `tf.contrib.distributions`.",
       warn_once=True)
   def __init__(self,
                num_masked,
@@ -243,7 +243,7 @@ class RealNVP(bijector.Bijector):
     "TensorFlow Probability "
     "(https://github.com/tensorflow/probability). You "
     "should update all references to use `tfp.distributions` "
-    "instead of `tfp.distributions`.",
+    "instead of `tf.contrib.distributions`.",
     warn_once=True)
 def real_nvp_default_template(
     hidden_layers,
