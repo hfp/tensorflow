@@ -16,7 +16,7 @@
 
 _SINGLE_URL_WHITELIST = depset([
     "arm_compiler",
-	"eigen_archive",
+    "eigen_archive",
     "libxsmm_archive",
 ])
 
