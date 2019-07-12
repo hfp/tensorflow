@@ -24,6 +24,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/literal.h"
 #include "tensorflow/compiler/xla/protobuf_util.h"
 #include "tensorflow/compiler/xla/service/dfs_hlo_visitor_with_default.h"
+#include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
 #include "tensorflow/compiler/xla/service/hlo_parser.h"
@@ -948,7 +949,7 @@ ENTRY entry (param: f32[]) -> (f32[], f32[], f32[]) {
  }
 )";
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
-                          ParseHloString(hlo_string));
+                          ParseAndReturnUnverifiedModule(hlo_string));
 
   auto* root = module->entry_computation()->root_instruction();
   auto* t1 = root->operand(0);
@@ -983,12 +984,13 @@ TEST_F(HloInstructionTest, FunctionVisitor) {
 
   int visit_num = 0;
   absl::flat_hash_map<HloInstruction*, int> visit_order;
-  EXPECT_IS_OK(add->Accept([&visit_num, &visit_order](HloInstruction* inst) {
+  FunctionVisitor visitor([&visit_num, &visit_order](HloInstruction* inst) {
     EXPECT_FALSE(visit_order.contains(inst));
     visit_order[inst] = visit_num;
     visit_num++;
     return Status::OK();
-  }));
+  });
+  EXPECT_IS_OK(add->Accept(&visitor));
 
   EXPECT_EQ(0, visit_order.at(param));
   // negate and exp can be visited in an arbitrary order.
@@ -1168,6 +1170,62 @@ TEST_F(HloInstructionTest, CloneOfFusionPreservesShape) {
   EXPECT_TRUE(ShapeUtil::Equal(root->operand(1)->operand(0)->shape(),
                                root2->operand(1)->operand(0)->shape()));
   EXPECT_TRUE(StructuralEqual(*fusion, *fusion2));
+}
+
+TEST_F(HloInstructionTest, FuseInstructionKeepsInstruction) {
+  constexpr char kHloString[] = R"(
+  HloModule test_module
+  fused_add {
+    p0 = f32[32,32]{1,0} parameter(0)
+    p1 = f32[32,32]{1,0} parameter(1)
+    ROOT add = f32[32,32]{1,0} add(p0, p1)
+  }
+
+  ENTRY reduce {
+    p2 = f32[32,32]{1,0} parameter(0)
+    p3 = f32[32,32]{1,0} parameter(1)
+    c1 = f32[] constant(1)
+    mul = f32[32,32]{1,0} multiply(p2, p3)
+    ROOT add = f32[32,32]{1,0} fusion(mul, c1), kind=kLoop, calls=fused_add
+  })";
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnUnverifiedModule(kHloString));
+  HloInstruction* fused_add = module->entry_computation()->root_instruction();
+  HloInstruction* mul = fused_add->mutable_operand(0);
+  EXPECT_EQ(1, mul->user_count());
+  fused_add->FuseInstruction(mul);
+  EXPECT_EQ(0, mul->user_count());
+  // The fused instruction is still present in the computation.
+  EXPECT_EQ(fused_add->parent(), mul->parent());
+}
+
+TEST_F(HloInstructionTest, FuseInstructionIntoMultiOutputKeepsInstruction) {
+  constexpr char kHloString[] = R"(
+  HloModule test_module
+  fused_add {
+    p0 = f32[32,32]{1,0} parameter(0)
+    p1 = f32[32,32]{1,0} parameter(1)
+    ROOT add = f32[32,32]{1,0} add(p0, p1)
+  }
+
+  ENTRY reduce {
+    p2 = f32[32,32]{1,0} parameter(0)
+    p3 = f32[32,32]{1,0} parameter(1)
+    c1 = f32[] constant(1)
+    mul = f32[32,32]{1,0} multiply(p2, p3)
+    add = f32[32,32]{1,0} fusion(mul, c1), kind=kLoop, calls=fused_add
+    ROOT root = (f32[32,32]{1,0}, f32[32,32]{1,0}) tuple(mul, add)
+  })";
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnUnverifiedModule(kHloString));
+  HloInstruction* root = module->entry_computation()->root_instruction();
+  HloInstruction* mul = root->mutable_operand(0);
+  HloInstruction* fused_add = root->mutable_operand(1);
+  EXPECT_EQ(2, mul->user_count());
+  fused_add->FuseInstructionIntoMultiOutput(mul);
+  EXPECT_EQ(0, mul->user_count());
+  // The fused instruction is still present in the computation.
+  EXPECT_EQ(root->parent(), mul->parent());
 }
 
 TEST_F(HloInstructionTest, NoRedundantFusionOperandsAfterReplacingUse) {
@@ -1676,7 +1734,7 @@ ENTRY entry (param: s32[]) -> s32[] {
   // Check that deep clones really deep clones every instruction and
   // computations, without leaving dangling pointers to the old module.
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
-                          ParseHloString(hlo_string));
+                          ParseAndReturnUnverifiedModule(hlo_string));
   std::unique_ptr<HloModule> clone = module->Clone();
   for (HloComputation* computation : clone->computations()) {
     EXPECT_EQ(computation->parent(), clone.get());
@@ -1727,6 +1785,18 @@ TEST_F(HloInstructionTest, IdenticalAccountsForCustomCallDnums) {
   EXPECT_FALSE(instr1->Identical(*instr2));
 }
 
+TEST_F(HloInstructionTest, IdenticalAccountsForCustomCallHasSideEffect) {
+  auto instr1 = HloInstruction::CreateCustomCall(ShapeUtil::MakeShape(F32, {}),
+                                                 /*operands=*/{},
+                                                 /*custom_call_target=*/"foo");
+  auto instr2 = instr1->Clone();
+  EXPECT_TRUE(instr1->Identical(*instr2));
+
+  auto custom_call_instr1 = Cast<HloCustomCallInstruction>(instr1.get());
+  custom_call_instr1->set_custom_call_has_side_effect(true);
+  EXPECT_FALSE(instr1->Identical(*instr2));
+}
+
 TEST_F(HloInstructionTest, CloneWindowOnCustomCall) {
   auto instr = HloInstruction::CreateCustomCall(ShapeUtil::MakeShape(F32, {}),
                                                 /*operands=*/{},
@@ -1751,6 +1821,29 @@ TEST_F(HloInstructionTest, CloneDnumsOnCustomCall) {
       << clone->convolution_dimension_numbers().DebugString();
 }
 
+TEST_F(HloInstructionTest, CloneHasSideEffectOnCustomCall) {
+  auto instr = HloInstruction::CreateCustomCall(ShapeUtil::MakeShape(F32, {}),
+                                                /*operands=*/{},
+                                                /*custom_call_target=*/"foo");
+  auto custom_call_instr = Cast<HloCustomCallInstruction>(instr.get());
+  EXPECT_FALSE(custom_call_instr->custom_call_has_side_effect());
+  custom_call_instr->set_custom_call_has_side_effect(true);
+  EXPECT_TRUE(custom_call_instr->custom_call_has_side_effect());
+  auto clone = instr->Clone();
+  auto custom_call_clone = Cast<HloCustomCallInstruction>(clone.get());
+  EXPECT_TRUE(custom_call_clone->custom_call_has_side_effect());
+}
+
+TEST_F(HloInstructionTest, CustomCallHasSideEffect) {
+  auto instr = HloInstruction::CreateCustomCall(ShapeUtil::MakeShape(F32, {}),
+                                                /*operands=*/{},
+                                                /*custom_call_target=*/"foo");
+  auto custom_call_instr = Cast<HloCustomCallInstruction>(instr.get());
+  EXPECT_FALSE(instr->HasSideEffect());
+  custom_call_instr->set_custom_call_has_side_effect(true);
+  EXPECT_TRUE(instr->HasSideEffect());
+}
+
 TEST_F(HloInstructionTest, PreserveOperandPrecisionOnCloneConv) {
   constexpr char kHloString[] = R"(
   HloModule test_module
@@ -1760,7 +1853,8 @@ TEST_F(HloInstructionTest, PreserveOperandPrecisionOnCloneConv) {
     ROOT conv = f32[1,2,1] convolution(arg0, arg1), window={size=1},
       dim_labels=b0f_0io->b0f, operand_precision={high,default}
   })";
-  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseHloString(kHloString));
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnUnverifiedModule(kHloString));
   auto* conv = module->entry_computation()->root_instruction();
 
   auto clone = conv->Clone();
@@ -1775,7 +1869,8 @@ TEST_F(HloInstructionTest, PreserveOuterDimensionPartitionsOnClone) {
   ENTRY test {
     ROOT iota = f32[100] iota(), iota_dimension=1, outer_dimension_partitions={0, 50}
   })";
-  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseHloString(kHloString));
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnUnverifiedModule(kHloString));
   auto* iota = module->entry_computation()->root_instruction();
 
   auto clone = iota->Clone();

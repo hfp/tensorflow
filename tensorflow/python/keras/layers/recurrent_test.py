@@ -46,9 +46,9 @@ from tensorflow.python.ops import special_math_ops
 from tensorflow.python.ops import state_ops
 from tensorflow.python.ops import variables as variables_lib
 from tensorflow.python.platform import test
-from tensorflow.python.training.tracking import object_identity
 from tensorflow.python.training.tracking import util as trackable_util
 from tensorflow.python.util import nest
+from tensorflow.python.util import object_identity
 
 # Used for nested input/output/state RNN test.
 NestedInput = collections.namedtuple('NestedInput', ['t1', 't2'])
@@ -610,7 +610,7 @@ class RNNTest(keras_parameterized.TestCase):
     update_2 = state_ops.assign_add(cells[0].kernel,
                                     array_ops.ones_like(cells[0].kernel))
     # TODO(b/128682878): Remove when RNNCells are __call__'d.
-    with base_layer_utils.call_context().enter(layer, x, True):
+    with base_layer_utils.call_context().enter(layer, x, True, None):
       cells[0].add_update(update_1, inputs=x)
       cells[0].add_update(update_2)
     self.assertEqual(len(layer.updates), 2)

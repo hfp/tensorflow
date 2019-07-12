@@ -4085,6 +4085,27 @@ TEST_F(AlgebraicSimplifierTest, MergeBroadcastAndIota2) {
   EXPECT_EQ(Cast<HloIotaInstruction>(root)->iota_dimension(), 2);
 }
 
+TEST_F(AlgebraicSimplifierTest, TransposeOfDot) {
+  const char* hlo_string = R"(
+    HloModule module
+
+    ENTRY test {
+      lhs = f32[3,4,5] parameter(0)
+      rhs = f32[6,3,4] parameter(1)
+      dot = f32[5,6] dot(lhs,rhs), lhs_contracting_dims={0,1}, rhs_contracting_dims={1,2}
+      ROOT transpose = f32[6,5] transpose(dot), dimensions={1,0}
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+
+  AlgebraicSimplifierOptions options;
+  AlgebraicSimplifier simplifier(options);
+  EXPECT_TRUE(simplifier.Run(module.get()).ValueOrDie());
+  auto root = module->entry_computation()->root_instruction();
+  EXPECT_THAT(root, GmockMatch(m::Dot(m::Parameter(1), m::Parameter(0))));
+}
+
 TEST_F(AlgebraicSimplifierTest, SliceOfPadLow) {
   const char* hlo_string = R"(
     HloModule module
@@ -4549,7 +4570,7 @@ TEST_P(DotStrengthReductionTest, DotStrengthReduction) {
   // The second pass of algebriac simplifer will remove dots without
   // non-contracting dimensions or contracting dimensions.
   TF_ASSERT_OK_AND_ASSIGN(changed, simplifier.Run(module.get()));
-  EXPECT_EQ(changed, dot_should_be_transformed);
+  EXPECT_EQ(changed, computation_should_be_modified);
   bool has_no_dot = true;
   for (const auto& hlo : computation->instructions()) {
     if (hlo->opcode() == HloOpcode::kDot) {
@@ -4709,6 +4730,23 @@ DotOfConcatTestSpec kDotOfConcatTestSpecs[] = {
     {/*m=*/20, /*k=*/20, /*n=*/1},  //
     {/*m=*/1, /*k=*/16, /*n=*/1},   //
 };
+
+TEST_F(DotOfConcatSimplificationTest, ConcatIntoScalarDot) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      param0 = f32[4] parameter(0)
+      param1 = f32[1] parameter(1)
+      constant = f32[5] constant({-0.38, 0.07, -0.62, 0.66, 0.20})
+      concat = f32[5] concatenate(param0, param1), dimensions={0}
+      ROOT dot = f32[] dot(concat, constant), lhs_contracting_dims={0},
+                                              rhs_contracting_dims={0}
+    })";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  AlgebraicSimplifierOptions options = default_options_;
+  options.set_enable_dot_strength_reduction(false);
+  ASSERT_FALSE(AlgebraicSimplifier(options).Run(m.get()).ValueOrDie());
+}
 
 // Test that DynamicUpdateSlice update param with any dimension equal to zero
 // gets removed.
@@ -5417,6 +5455,67 @@ TEST_F(AlgebraicSimplifierTest, CompareSame) {
   ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).ValueOrDie());
   EXPECT_THAT(m->entry_computation()->root_instruction(),
               GmockMatch(m::Broadcast(m::ConstantScalar(true))));
+}
+
+TEST_F(AlgebraicSimplifierTest, RemainderOfIota) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      iota = s32[5,1000] iota(), iota_dimension=0
+      five = s32[] constant(5)
+      five_bcast = s32[5,1000] broadcast(s32[] five), dimensions={}
+      ROOT remainder = s32[5,1000] remainder(iota, s32[5,1000] five_bcast)
+    })";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).ValueOrDie());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Iota()));
+}
+
+TEST_F(AlgebraicSimplifierTest, RemainderOfNPlusIota) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      iota = s32[5,1000] iota(), iota_dimension=0
+      five = s32[] constant(5)
+      five_bcast = s32[5,1000] broadcast(five), dimensions={}
+      sum = s32[5,1000] add(iota, five_bcast)
+      ROOT remainder = s32[5,1000] remainder(sum, s32[5,1000] five_bcast)
+    })";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).ValueOrDie());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Remainder(m::Iota(), m::Broadcast())));
+}
+
+// No simplification because 125 + 5 overflows S8.
+TEST_F(AlgebraicSimplifierTest, RemainderOfNPlusIotaOverflow) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      iota = s8[126] iota(), iota_dimension=0
+      five = s8[] constant(5)
+      five_bcast = s8[126] broadcast(five), dimensions={}
+      sum = s8[126] add(iota, five_bcast)
+      ROOT remainder = s8[126] remainder(sum, s8[126] five_bcast)
+    })";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_FALSE(AlgebraicSimplifier(default_options_).Run(m.get()).ValueOrDie());
+}
+
+TEST_F(AlgebraicSimplifierTest, RepeatedRemainder) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      p = s32[1000] parameter(0)
+      q = s32[1000] parameter(1)
+      r = s32[1000] remainder(p, q)
+      ROOT rr = s32[1000] remainder(r, q)
+    })";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).ValueOrDie());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Remainder(m::Parameter(), m::Parameter())));
 }
 
 }  // namespace

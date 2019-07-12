@@ -30,7 +30,6 @@ limitations under the License.
 #include "tensorflow/compiler/xla/iterator_util.h"
 #include "tensorflow/compiler/xla/map_util.h"
 #include "tensorflow/compiler/xla/service/dfs_hlo_visitor.h"
-#include "tensorflow/compiler/xla/service/dfs_hlo_visitor_with_default.h"
 #include "tensorflow/compiler/xla/service/hlo.pb.h"
 #include "tensorflow/compiler/xla/service/hlo_clone_context.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
@@ -329,11 +328,6 @@ class HloComputation {
   Status AcceptOrdered(DfsHloVisitorBase<HloInstructionPtr>* visitor,
                        absl::Span<HloInstruction* const> order) const;
 
-  // Same as Accept() above, but the visitor is given as a function.
-  Status Accept(const std::function<Status(HloInstruction*)>& visitor_func);
-  Status Accept(
-      const std::function<Status(const HloInstruction*)>& visitor_func) const;
-
   // Returns a deep copy of this computation including all instructions.
   // If the clone context is specified, it will be populated with the cloned
   // object mappings, and its module() will be used to add new computations
@@ -410,6 +404,9 @@ class HloComputation {
 
   // Returns if this computation is a fusion computation.
   bool IsFusionComputation() const { return fusion_instruction_ != nullptr; }
+
+  // Returns if this computation is the entry computation of the module.
+  bool IsEntryComputation() const;
 
   // Returns the owning fusion instruction, or nullptr if this is not a fusion
   // computation.

@@ -1,3 +1,6 @@
+load("//tensorflow:tensorflow.bzl", "tf_py_wrap_cc")
+load("//tensorflow:tensorflow.bzl", "py_binary", "tf_py_test")
+
 package(
     default_visibility = [
         "//tensorflow/lite:__subpackages__",
@@ -5,10 +8,6 @@ package(
     ],
     licenses = ["notice"],  # Apache 2.0
 )
-
-load("//tensorflow:tensorflow.bzl", "tf_py_wrap_cc")
-load("//tensorflow:tensorflow.bzl", "tf_py_test")
-load("//tensorflow:tensorflow.bzl", "py_binary")
 
 config_setting(
     name = "tflite_convert_with_select_tf_ops",
@@ -23,9 +22,11 @@ cc_library(
     name = "toco_python_api",
     srcs = ["toco_python_api.cc"],
     hdrs = ["toco_python_api.h"],
+    features = ["no_layering_check"],
     deps = [
         "//third_party/python_runtime:headers",
         "//tensorflow/core:lib",
+        "//tensorflow/core:protos_all_cc",
         "//tensorflow/lite/python/interpreter_wrapper:python_utils",
         "//tensorflow/lite/toco:model_flags_proto_cc",
         "//tensorflow/lite/toco:toco_flags_proto_cc",

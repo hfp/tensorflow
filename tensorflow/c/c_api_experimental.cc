@@ -77,8 +77,18 @@ unsigned char TF_SetXlaEnableLazyCompilation(unsigned char enable) {
   return original;
 }
 
-void TF_SetXLaAutoJitMode(const char* mode) {
+void TF_SetXlaAutoJitMode(const char* mode) {
   tensorflow::SetXlaAutoJitFlagFromFlagString(mode);
+}
+
+unsigned char TF_GetXlaConstantFoldingDisabled() {
+  return static_cast<unsigned char>(
+      tensorflow::GetBuildXlaOpsPassFlags()->tf_xla_disable_constant_folding);
+}
+
+void TF_SetXlaConstantFoldingDisabled(unsigned char should_enable) {
+  tensorflow::GetBuildXlaOpsPassFlags()->tf_xla_disable_constant_folding =
+      static_cast<bool>(should_enable);
 }
 
 void TF_SetXlaMinClusterSize(int size) {
@@ -621,7 +631,7 @@ TF_Tensor* TF_CheckpointReaderGetTensor(TF_CheckpointReader* reader,
   std::unique_ptr<tensorflow::Tensor> tensor;
   reader->GetTensor(name, &tensor, status);
   if (!status->status.ok()) return nullptr;
-  return tensorflow::TF_TensorFromTensor(*tensor.get(), status);
+  return tensorflow::TF_TensorFromTensor(*tensor, status);
 }
 
 void TF_CheckpointReaderGetVariableShape(TF_CheckpointReader* reader,
@@ -663,7 +673,7 @@ void TF_DeleteAttrBuilder(TF_AttrBuilder* builder) { delete builder; }
 void TF_AttrBuilderSetType(TF_AttrBuilder* builder, const char* attr_name,
                            TF_DataType value) {
   auto iter = builder->attr_names.insert(attr_name).first;
-  builder->Set((*iter).c_str(), static_cast<tensorflow::DataType>(value));
+  builder->Set(*iter, static_cast<tensorflow::DataType>(value));
 }
 
 void TF_AttrBuilderSetTypeList(TF_AttrBuilder* builder, const char* attr_name,
@@ -726,14 +736,15 @@ int TF_PickUnusedPortOrDie() {
   return tensorflow::internal::PickUnusedPortOrDie();
 }
 
-TFE_TensorHandle* TFE_NewTensorHandleFromScalar(TF_DataType dtype_arg,
-                                                void* data, size_t len) {
-  auto dtype = static_cast<tensorflow::DataType>(dtype_arg);
+TFE_TensorHandle* TFE_NewTensorHandleFromScalar(TF_DataType data_type,
+                                                void* data, size_t len,
+                                                TF_Status* status) {
+  auto dtype = static_cast<tensorflow::DataType>(data_type);
   DCHECK(tensorflow::DataTypeCanUseMemcpy(dtype));
 
   tensorflow::Tensor tensor(dtype, tensorflow::TensorShape({}));
   std::memcpy(tensorflow::TensorCApi::Buffer(tensor)->data(), data, len);
-  return new TFE_TensorHandle(tensor, nullptr, nullptr);
+  return TFE_TensorHandle::CreateLocalHandle(tensor, status);
 }
 
 namespace {
@@ -794,8 +805,8 @@ std::string tensorflow::getTF_OutputDebugString(TF_Output node) {
 using tensorflow::getTF_OutputDebugString;
 
 TFE_TensorHandle* TFE_NewTensorHandleFromTFOutput(TF_Output t,
-                                                  TF_DataType dtype) {
-  auto ret = new TFE_TensorHandle(t, dtype);
+                                                  TF_DataType data_type) {
+  auto ret = new TFE_TensorHandle(t, data_type);
   VLOG(1) << "Storing TFOutput " << getTF_OutputDebugString(t)
           << " into tensor handle " << ret << " with internal handle "
           << ret->handle;

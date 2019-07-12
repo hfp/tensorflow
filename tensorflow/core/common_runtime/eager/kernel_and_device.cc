@@ -45,6 +45,18 @@ limitations under the License.
 
 namespace tensorflow {
 
+std::function<void(std::function<void()>)>* KernelAndDevice::get_runner()
+    const {
+  if (runner_) {
+    return runner_;
+  } else {
+    static auto* default_runner =
+        new std::function<void(std::function<void()>)>(
+            [](std::function<void()> f) { f(); });
+    return default_runner;
+  }
+}
+
 KernelAndDeviceFunc::~KernelAndDeviceFunc() {
   if (handle_ != kInvalidHandle) {
     Status status = pflr_->ReleaseHandle(handle_);
@@ -274,7 +286,7 @@ Status KernelAndDeviceOp::Run(ScopedStepContainer* step_container,
     params.stats_collector = step_stats_collector.get();
     params.graph_collector = graph_collector;
   }
-  params.runner = runner_ != nullptr ? runner_ : &default_runner_;
+  params.runner = get_runner();
 
   params.step_container = step_container;
   params.collective_executor =
@@ -298,23 +310,35 @@ Status KernelAndDeviceOp::Run(ScopedStepContainer* step_container,
     if (device_->TraceUsingAnnotations()) {
       // 'ScopedActivity' will trace the OpKernel scheduling time on host.
       profiler::TraceMe activity(
-          [&] { return strings::StrCat(op_name, ":", kernel_->type_string()); },
+          [&] {
+            return strings::StrCat(
+                op_name, ":", kernel_->type_string(),
+                "#id=", step_container ? step_container->step_id() : 0,
+                ",device=", device_->name(), ",async=false#");
+          },
           profiler::TraceMeLevel::kInfo);
       // 'ScopedAnnotation' will trace the OpKernel execution time on device.
       tracing::ScopedAnnotation annotation(op_name, kernel_->type_string());
       device_->Compute(kernel_.get(), &context);
     } else {
       profiler::TraceMe activity(
-          [&] { return strings::StrCat(op_name, ":", kernel_->type_string()); },
+          [&] {
+            return strings::StrCat(
+                op_name, ":", kernel_->type_string(),
+                "#id=", step_container ? step_container->step_id() : 0,
+                ",device=", device_->name(), ",async=false#");
+          },
           profiler::TraceMeLevel::kInfo);
       device_->Compute(kernel_.get(), &context);
     }
   }
   if (!context.status().ok()) return context.status();
 
-  outputs->clear();
-  for (int i = 0; i < context.num_outputs(); ++i) {
-    outputs->push_back(Tensor(*context.mutable_output(i)));
+  if (outputs != nullptr) {
+    outputs->clear();
+    for (int i = 0; i < context.num_outputs(); ++i) {
+      outputs->push_back(Tensor(*context.mutable_output(i)));
+    }
   }
   if (stats != nullptr) {
     UpdateStats(&context, step_stats_collector.get(), stats);
@@ -348,7 +372,7 @@ Status KernelAndDeviceFunc::Run(
     step_stats_collector.reset(new StepStatsCollector(step_stats));
   }
   opts.stats_collector = step_stats_collector.get();
-  opts.runner = (runner_ == nullptr) ? &default_runner_ : runner_;
+  opts.runner = get_runner();
 
   Notification done;
   Status status;
@@ -358,13 +382,17 @@ Status KernelAndDeviceFunc::Run(
   for (const TensorValue& tensor_value : inputs) {
     input_vector.push_back(*tensor_value.tensor);
   }
-
-  pflr_->Run(opts, handle_, input_vector, outputs,
-             [&status, &done](const Status& s) {
-               status = s;
-               done.Notify();
-             });
-  done.WaitForNotification();
+  {
+    profiler::TraceMe activity(
+        [&] { return absl::StrCat("FunctionRun:", name()); },
+        profiler::TraceMeLevel::kInfo);
+    pflr_->Run(opts, handle_, input_vector, outputs,
+               [&status, &done](const Status& s) {
+                 status = s;
+                 done.Notify();
+               });
+    done.WaitForNotification();
+  }
 
   rendezvous->Unref();
   if (step_stats_collector != nullptr) {

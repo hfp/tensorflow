@@ -22,9 +22,12 @@ import six
 
 from tensorflow.core.framework import tensor_pb2
 from tensorflow.core.framework import tensor_shape_pb2
+from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
+from tensorflow.python.framework import tensor_like
 from tensorflow.python.framework import tensor_shape
 from tensorflow.python.util import compat
+from tensorflow.python.util.tf_export import tf_export
 
 # Fallback in case fast_tensor_util is not properly compiled.
 # pylint: disable=g-import-not-at-top
@@ -33,11 +36,6 @@ try:
   _FAST_TENSOR_UTIL_AVAILABLE = True
 except ImportError:
   _FAST_TENSOR_UTIL_AVAILABLE = False
-
-from tensorflow.python.framework import dtypes
-from tensorflow.python.framework import ops
-from tensorflow.python.util.tf_export import tf_export
-
 # pylint: enable=g-import-not-at-top
 
 
@@ -371,33 +369,35 @@ def _AssertCompatible(values, dtype):
                       (dtype.name, repr(mismatch), type(mismatch).__name__))
 
 
+def _is_array_like(obj):  # pylint: disable=invalid-name
+  """Check if a given object is array-like."""
+  # TODO(slebedev): an object could also implement C-level array interface.
+  if (callable(getattr(obj, "__array__", None)) or
+      isinstance(getattr(obj, "__array_interface__", None), dict)):
+    return True
+
+  try:
+    memoryview(obj)
+  except TypeError:
+    return False
+  else:
+    return not isinstance(obj, bytes)
+
+
 # pylint: disable=invalid-name
-@tf_export(v1=["make_tensor_proto"])
+@tf_export("make_tensor_proto")
 def make_tensor_proto(values, dtype=None, shape=None, verify_shape=False,
                       allow_broadcast=False):
   """Create a TensorProto.
 
-  Args:
-    values:         Values to put in the TensorProto.
-    dtype:          Optional tensor_pb2 DataType value.
-    shape:          List of integers representing the dimensions of tensor.
-    verify_shape:   Boolean that enables verification of a shape of values.
-    allow_broadcast:Boolean that enables allowing scalars and 1 length vector
-        broadcasting. Cannot be true when verify_shape is true.
+  In TensorFlow 2.0, representing tensors as protos should no longer be a
+  common workflow. That said, this utility function is still useful for
+  generating TF Serving request protos:
 
-  Returns:
-    A `TensorProto`. Depending on the type, it may contain data in the
-    "tensor_content" attribute, which is not directly useful to Python programs.
-    To access the values you should convert the proto back to a numpy ndarray
-    with `tf.make_ndarray(proto)`.
-
-    If `values` is a `TensorProto`, it is immediately returned; `dtype` and
-    `shape` are ignored.
-
-  Raises:
-    TypeError:  if unsupported types are provided.
-    ValueError: if arguments have inappropriate values or if verify_shape is
-     True and shape of values is not equals to a shape from the argument.
+    request = tensorflow_serving.apis.predict_pb2.PredictRequest()
+    request.model_spec.name = "my_model"
+    request.model_spec.signature_name = "serving_default"
+    request.inputs["images"].CopyFrom(tf.make_tensor_proto(X_new))
 
   make_tensor_proto accepts "values" of a python scalar, a python list, a
   numpy ndarray, or a numpy scalar.
@@ -419,6 +419,28 @@ def make_tensor_proto(values, dtype=None, shape=None, verify_shape=False,
   Otherwise, "shape" specifies the tensor's shape and the numpy array
   can not have more elements than what "shape" specifies.
 
+  Args:
+    values:         Values to put in the TensorProto.
+    dtype:          Optional tensor_pb2 DataType value.
+    shape:          List of integers representing the dimensions of tensor.
+    verify_shape:   Boolean that enables verification of a shape of values.
+    allow_broadcast:  Boolean that enables allowing scalars and 1 length vector
+        broadcasting. Cannot be true when verify_shape is true.
+
+  Returns:
+    A `TensorProto`. Depending on the type, it may contain data in the
+    "tensor_content" attribute, which is not directly useful to Python programs.
+    To access the values you should convert the proto back to a numpy ndarray
+    with `tf.make_ndarray(proto)`.
+
+    If `values` is a `TensorProto`, it is immediately returned; `dtype` and
+    `shape` are ignored.
+
+  Raises:
+    TypeError:  if unsupported types are provided.
+    ValueError: if arguments have inappropriate values or if verify_shape is
+     True and shape of values is not equals to a shape from the argument.
+
   """
   if allow_broadcast and verify_shape:
     raise ValueError("allow_broadcast and verify_shape are not both allowed.")
@@ -434,21 +456,15 @@ def make_tensor_proto(values, dtype=None, shape=None, verify_shape=False,
           dtypes.qint32
       ])
 
+  if _is_array_like(values):
+    values = np.asarray(values)
+
   # We first convert value to a numpy array or scalar.
   if isinstance(values, (np.ndarray, np.generic)):
-    if dtype:
+    if dtype and dtype.is_numpy_compatible:
       nparray = values.astype(dtype.as_numpy_dtype)
     else:
       nparray = values
-  elif callable(getattr(values, "__array__", None)) or isinstance(
-      getattr(values, "__array_interface__", None), dict):
-    # If a class has the __array__ method, or __array_interface__ dict, then it
-    # is possible to convert to numpy array.
-    nparray = np.asarray(values, dtype=dtype)
-
-    # This is the preferred way to create an array from the object, so replace
-    # the `values` with the array so that _FlattenToStrings is not run.
-    values = nparray
   else:
     if values is None:
       raise ValueError("None values not supported.")
@@ -458,8 +474,8 @@ def make_tensor_proto(values, dtype=None, shape=None, verify_shape=False,
       np_dt = dtype.as_numpy_dtype
     else:
       np_dt = None
-    # If shape is None, numpy.prod returns None when dtype is not set, but raises
-    # exception when dtype is set to np.int64
+    # If shape is None, numpy.prod returns None when dtype is not set, but
+    # raises exception when dtype is set to np.int64
     if shape is not None and np.prod(shape, dtype=np.int64) == 0:
       nparray = np.empty(shape, dtype=np_dt)
     else:
@@ -781,7 +797,7 @@ def _ConstantValue(tensor, partial):
     return None
 
 
-@tf_export('get_static_value')
+@tf_export("get_static_value")
 def constant_value(tensor, partial=False):  # pylint: disable=invalid-name
   """Returns the constant value of the given tensor, if efficiently calculable.
 
@@ -949,5 +965,21 @@ def is_tensor(x):  # pylint: disable=invalid-name
   Returns:
     `True` if `x` is a tensor or "tensor-like", `False` if not.
   """
-  return (isinstance(x, ops._TensorLike) or ops.is_dense_tensor_like(x) or  # pylint: disable=protected-access
+  return (isinstance(x, tensor_like._TensorLike) or  # pylint: disable=protected-access
+          ops.is_dense_tensor_like(x) or
           getattr(x, "is_tensor_like", False))
+
+
+def shape_tensor(shape):  # pylint: disable=invalid-name
+  """Convert to an int32 or int64 tensor, defaulting to int32 if empty."""
+  dtype = None
+  if isinstance(shape, (tuple, list)):
+    if not shape:
+      dtype = dtypes.int32
+    else:
+      # If there are Dimension objects in the shape, unwrap them. This can be a
+      # problem if v1 and v2 TensorShape objects get mixed up in partial
+      # conversions, leading to shapes such as (1, 2, Dimension(5)), which are
+      # not convertible to Tensors becasue of mixed content.
+      shape = tuple(map(tensor_shape.dimension_value, shape))
+  return ops.convert_to_tensor(shape, dtype=dtype, name="shape")

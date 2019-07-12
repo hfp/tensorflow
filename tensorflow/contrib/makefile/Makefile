@@ -639,6 +639,7 @@ tensorflow/c/kernels.cc \
 tensorflow/c/tf_datatype.cc \
 tensorflow/c/tf_status.cc \
 tensorflow/c/tf_status_helper.cc \
+tensorflow/c/tf_tensor.cc \
 $(wildcard tensorflow/core/*.cc) \
 $(wildcard tensorflow/core/common_runtime/*.cc) \
 $(wildcard tensorflow/core/framework/*.cc) \
@@ -908,7 +909,13 @@ $(HOST_OBJDIR)%.pb.o: $(HOST_GENDIR)%.pb.cc
 $(PROTO_TEXT_OBJS) : $(PROTO_TEXT_PB_H_FILES)
 
 # Ensures we link CoreFoundation as it is used for time library when building
-# for Mac.
+# for Mac and iOS
+ifeq ($(TARGET),OSX)
+  ifeq ($(HOST_ARCH),x86_64)
+    HOST_LDOPTS += -framework CoreFoundation
+    LIBS += -framework CoreFoundation
+  endif
+endif
 ifeq ($(TARGET),IOS)
   ifeq ($(IOS_ARCH),X86_64)
     HOST_LDOPTS += -framework CoreFoundation

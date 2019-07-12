@@ -27,6 +27,7 @@ limitations under the License.
 #include "tensorflow/core/common_runtime/device_mgr.h"
 #include "tensorflow/core/common_runtime/device_set.h"
 #include "tensorflow/core/common_runtime/function.h"
+#include "tensorflow/core/common_runtime/lower_case_op.h"
 #include "tensorflow/core/common_runtime/lower_functional_ops.h"
 #include "tensorflow/core/common_runtime/lower_if_op.h"
 #include "tensorflow/core/common_runtime/lower_while_op.h"
@@ -1121,6 +1122,7 @@ Status InlineFunctionCalls(const GrapplerItem& item,
   std::unique_ptr<Graph> graph = absl::make_unique<Graph>(flib_def);
 
   GraphConstructorOptions graph_constructor_options;
+  graph_constructor_options.allow_internal_ops = true;
   TF_RETURN_IF_ERROR(ConvertGraphDefToGraph(graph_constructor_options,
                                             item.graph, graph.get()));
 
@@ -1155,8 +1157,10 @@ Status InlineFunctionCalls(const GrapplerItem& item,
       AddStrictInputSemantics(n, graph.get());
       AddFrameForwardingControlEdge(control_flow_info, n, graph.get());
 
-      if (n->type_string() == "If") {
+      if (n->IsIfNode()) {
         TF_RETURN_IF_ERROR(RewriteIfNode(n, graph.get(), flib_def, false));
+      } else if (n->type_string() == "Case") {
+        TF_RETURN_IF_ERROR(RewriteCaseNode(n, graph.get(), flib_def, false));
       } else if (n->type_string() == "While") {
         TF_RETURN_IF_ERROR(RewriteWhileNode(n, graph.get(), flib_def, false));
       }
@@ -1186,19 +1190,20 @@ Status InlineFunctionCalls(const GrapplerItem& item,
 
     // `PartitionedCall` is a TF-2.0 function call mechanism for multi-device
     // functions:
-    // a) Function can be multi-device, and we can't override device placements.
+    // a) Function can be multi-device.
     // b) Automatic control dependencies tracking guarantees that all function
     //    side-effectful nodes will have a path to one of the control outputs.
     //    Control outputs and control edges between side-effectful (stateful)
     //    nodes are used to explicitly mark the nodes that must execute, and to
     //    define their execution order.
     if (n->IsPartitionedCall() || force_inline_as_multi_device) {
-      inline_options.override_device = false;
-      inline_options.initialize_empty_device = true;
       inline_options.output_control_src = OutputControlSource::kControlOutputs;
+      inline_options.inlined_function_body_placer =
+          InlinedFunctionBodyPlacer::MultiDevice();
     } else {
-      inline_options.override_device = true;
       inline_options.output_control_src = OutputControlSource::kDataOutputs;
+      inline_options.inlined_function_body_placer =
+          InlinedFunctionBodyPlacer::SingleDevice();
     }
 
     if (fetch_nodes.contains(n->name())) {

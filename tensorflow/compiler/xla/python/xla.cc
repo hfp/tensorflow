@@ -13,10 +13,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
+#include "absl/base/casts.h"
 #include "absl/hash/hash.h"
+#include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/types/optional.h"
 #include "absl/types/span.h"
@@ -34,9 +37,11 @@ limitations under the License.
 #include "tensorflow/compiler/xla/python/local_client.h"
 #include "tensorflow/compiler/xla/python/types.h"
 #include "tensorflow/compiler/xla/python/xrt.h"
+#include "tensorflow/compiler/xla/service/custom_call_target_registry.h"
 #include "tensorflow/compiler/xla/service/hlo_graph_dumper.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/compiler/xla/service/hlo_module.h"
+#include "tensorflow/compiler/xla/service/hlo_parser.h"
 #include "tensorflow/compiler/xla/service/name_uniquer.h"
 #include "tensorflow/compiler/xla/service/platform_util.h"
 #include "tensorflow/compiler/xla/shape.h"
@@ -103,6 +108,22 @@ StatusOr<std::string> GetComputationHloDotGraph(
                      RenderedGraphFormat::kDot);
 }
 
+// Registers a 'fn_capsule' as a CPU custom call target.
+// 'fn_capsule' is a void* pointer encapsulated in a PyCapsule object, with name
+// "xla._CPU_CUSTOM_CALL_TARGET".
+Status RegisterCpuCustomCallTarget(const std::string& fn_name,
+                                   py::capsule capsule) {
+  static const char* const kName = "xla._CPU_CUSTOM_CALL_TARGET";
+  if (absl::string_view(capsule.name()) != kName) {
+    return InvalidArgument(
+        "Argument to RegisterCpuCustomCallTargetRegistry was not a "
+        "xla._CPU_CUSTOM_CALL_TARGET capsule.");
+  }
+  CustomCallTargetRegistry::Global()->Register(
+      fn_name, static_cast<void*>(capsule), "Host");
+  return Status::OK();
+}
+
 }  // namespace
 
 PYBIND11_MODULE(xla_extension, m) {
@@ -131,6 +152,9 @@ PYBIND11_MODULE(xla_extension, m) {
   // Shapes
   py::class_<Shape> shape_class(m, "Shape");
   shape_class
+      .def(py::init([](const string& s) {
+        return absl::make_unique<Shape>(ValueOrThrow(ParseShape(s)));
+      }))
       .def_static(
           "tuple_shape",
           [](std::vector<Shape> shapes) -> Shape {
@@ -239,7 +263,8 @@ PYBIND11_MODULE(xla_extension, m) {
       .def("__repr__", &ProgramShape::ToString);
 
   // Literals
-  py::class_<Literal>(m, "Literal").def("__repr__", &Literal::ToString);
+  py::class_<Literal, std::shared_ptr<Literal>>(m, "Literal")
+      .def("__repr__", &Literal::ToString);
   py::class_<LiteralSlice>(m, "LiteralSlice");
   py::implicitly_convertible<Literal, LiteralSlice>();
   py::implicitly_convertible<BorrowingLiteral, LiteralSlice>();
@@ -275,7 +300,8 @@ PYBIND11_MODULE(xla_extension, m) {
   py::class_<AllocatorConfig> alloc_config(m, "AllocatorConfig");
   alloc_config.def(py::init<>())
       .def_readwrite("kind", &AllocatorConfig::kind)
-      .def_readwrite("memory_fraction", &AllocatorConfig::memory_fraction);
+      .def_readwrite("memory_fraction", &AllocatorConfig::memory_fraction)
+      .def_readwrite("preallocate", &AllocatorConfig::preallocate);
   py::enum_<AllocatorConfig::Kind>(alloc_config, "Kind")
       .value("DEFAULT", AllocatorConfig::Kind::kDefault)
       .value("PLATFORM", AllocatorConfig::Kind::kPlatform)
@@ -291,17 +317,31 @@ PYBIND11_MODULE(xla_extension, m) {
 
   py::class_<PyLocalBuffer>(m, "PyLocalBuffer")
       .def_static("from_python", &PyLocalBuffer::FromPython)
-      .def_static("from_python_values", &PyLocalBuffer::FromPythonValues)
       .def_static("make_tuple", &PyLocalBuffer::MakeTuple)
+      .def("copy_to_device", &PyLocalBuffer::CopyToDevice)
       .def("delete", &PyLocalBuffer::Delete)
       .def("destructure", &PyLocalBuffer::DestructureTuple)
       .def("block_host_until_ready", &PyLocalBuffer::BlockHostUntilReady)
+      .def("copy_to_host_async", &PyLocalBuffer::CopyToHostAsync)
       .def("to_py", &PyLocalBuffer::ToPython)
       .def("shape", &PyLocalBuffer::on_host_shape)
       .def("device", &PyLocalBuffer::device_ordinal)
-      .def("is_deleted", [](const PyLocalBuffer& buffer) {
-        return buffer.DeviceBuffer() == nullptr;
-      });
+      .def("is_deleted",
+           [](const PyLocalBuffer& buffer) {
+             return buffer.DeviceBuffer() == nullptr;
+           })
+      .def("unsafe_buffer_pointer",
+           [](const PyLocalBuffer& buffer) -> StatusOr<std::uintptr_t> {
+             TF_ASSIGN_OR_RETURN(ShapedBuffer shaped_buffer,
+                                 buffer.AsShapedBuffer());
+             if (shaped_buffer.on_device_shape().IsTuple()) {
+               return Unimplemented(
+                   "unsafe_buffer_pointer is not implemented for tuple "
+                   "buffers.");
+             }
+             return absl::bit_cast<std::uintptr_t>(
+                 shaped_buffer.root_buffer().opaque());
+           });
 
   py::class_<PyLocalExecutable>(m, "LocalExecutable")
       .def_static("Compile", &PyLocalExecutable::Compile,
@@ -322,7 +362,10 @@ PYBIND11_MODULE(xla_extension, m) {
                     &DebugOptions::set_xla_cpu_fast_math_honor_infs)
       .def_property("xla_cpu_fast_math_honor_nans",
                     &DebugOptions::xla_cpu_fast_math_honor_nans,
-                    &DebugOptions::set_xla_cpu_fast_math_honor_nans);
+                    &DebugOptions::set_xla_cpu_fast_math_honor_nans)
+      .def_property("xla_cpu_fast_math_honor_division",
+                    &DebugOptions::xla_cpu_fast_math_honor_division,
+                    &DebugOptions::set_xla_cpu_fast_math_honor_division);
 
   py::class_<ExecutableBuildOptions>(m, "ExecutableBuildOptions")
       .def(py::init<>())
@@ -470,6 +513,8 @@ PYBIND11_MODULE(xla_extension, m) {
           static_cast<XlaOp (*)(XlaBuilder*, absl::Span<const XlaOp>,
                                 absl::Span<const XlaOp>, const XlaComputation&,
                                 absl::Span<const int64>)>(&Reduce));
+  ops.def("ReducePrecision", &ReducePrecision, py::arg("operand"),
+          py::arg("exponent_bits"), py::arg("mantissa_bits"));
   ops.def("ReduceWindowWithGeneralPadding", &ReduceWindowWithGeneralPadding);
   ops.def("ReplicaId", &ReplicaId);
   ops.def("Reshape", static_cast<XlaOp (*)(XlaOp, absl::Span<const int64>,
@@ -586,9 +631,13 @@ PYBIND11_MODULE(xla_extension, m) {
       .value("TRANSPOSE", TriangularSolveOptions::TRANSPOSE)
       .value("ADJOINT", TriangularSolveOptions::ADJOINT);
 
+  py::enum_<PrecisionConfig::Precision>(m, "PrecisionConfig_Precision")
+      .value("DEFAULT", PrecisionConfig::DEFAULT)
+      .value("HIGH", PrecisionConfig::HIGH)
+      .value("HIGHEST", PrecisionConfig::HIGHEST);
+
   // TODO(phawkins): improve bindings for these types.
   py::class_<ChannelHandle>(m, "ChannelHandle");
-  py::class_<PrecisionConfig>(m, "PrecisionConfig");
 
   tensorflow::AddXrtSubmodule(&m);
 }
