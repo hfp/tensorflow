@@ -25,6 +25,8 @@ limitations under the License.
 #include "tensorflow/lite/experimental/ruy/internal_matrix.h"
 #include "tensorflow/lite/experimental/ruy/opt_set.h"
 #include "tensorflow/lite/experimental/ruy/path.h"
+#include "tensorflow/lite/experimental/ruy/platform.h"
+#include "tensorflow/lite/experimental/ruy/side_pair.h"
 #include "tensorflow/lite/experimental/ruy/size_util.h"
 #include "tensorflow/lite/experimental/ruy/spec.h"
 #include "tensorflow/lite/experimental/ruy/tune.h"
@@ -75,20 +77,16 @@ void RunKernelTyped(Tuning tuning, const PackedMatrix<LhsScalar>& lhs,
 // Main entry point for kernels.
 template <Path ThePath, typename LhsScalar, typename RhsScalar,
           typename DstScalar, typename Spec>
-void RunKernel(Tuning tuning, const PMatrix& lhs, const PMatrix& rhs,
-               void* spec, int start_row, int start_col, int end_row,
-               int end_col, DMatrix* dst) {
+void RunKernel(Tuning tuning, const SidePair<PMatrix>& src, void* spec,
+               const SidePair<int>& start, const SidePair<int>& end,
+               DMatrix* dst) {
   Matrix<DstScalar> mdst = ToMatrix<DstScalar>(*dst);
   RunKernelTyped<ThePath, LhsScalar, RhsScalar, DstScalar, Spec>(
-      tuning, ToPackedMatrix<LhsScalar>(lhs), ToPackedMatrix<RhsScalar>(rhs),
-      *static_cast<const Spec*>(spec), start_row, start_col, end_row, end_col,
-      &mdst);
+      tuning, ToPackedMatrix<LhsScalar>(src[Side::kLhs]),
+      ToPackedMatrix<RhsScalar>(src[Side::kRhs]),
+      *static_cast<const Spec*>(spec), start[Side::kLhs], start[Side::kRhs],
+      end[Side::kLhs], end[Side::kRhs], &mdst);
 }
-
-// The signature of RunKernel is the same, regardless of template parameters.
-using RunKernelFn =
-    decltype(RunKernel<Path::kStandardCpp, std::int8_t, std::int8_t,
-                       std::int8_t, BasicSpec<std::int32_t, std::int8_t>>);
 
 // Copied from TF Lite code.
 inline std::int32_t MultiplyByQuantizedMultiplier(
@@ -217,7 +215,7 @@ RUY_INHERIT_KERNEL(Path::kStandardCpp, Path::kNeon)
 RUY_INHERIT_KERNEL(Path::kNeon, Path::kNeonDotprod)
 
 // KernelParams are shared across 32-bit and 64-bit NEON code.
-#if ((defined RUY_NEON_64) || (defined RUY_NEON_32)) && \
+#if (RUY_PLATFORM(NEON_64) || RUY_PLATFORM(NEON_32)) && \
     (RUY_OPT_ENABLED(RUY_OPT_ASM))
 
 #define RUY_ASM_FLAG_HAS_BIAS 0x1
@@ -369,7 +367,7 @@ void Kernel8bitNeonInOrder(const KernelParams8bit<4, 4>& params);
 void Kernel8bitNeonDotprodOutOfOrder(const KernelParams8bit<8, 8>& params);
 void Kernel8bitNeonDotprodInOrder(const KernelParams8bit<8, 8>& params);
 
-#ifdef RUY_NEON_64
+#if RUY_PLATFORM(NEON_64)
 template <typename DstScalar>
 struct Kernel<Path::kNeon, std::int8_t, std::int8_t, DstScalar,
               BasicSpec<std::int32_t, DstScalar>> {
@@ -489,7 +487,7 @@ void KernelFloatNeonInOrder(const KernelParamsFloat<8, 8>& params);
 void KernelFloat32NeonOutOfOrder(const KernelParamsFloat<8, 4>& params);
 void KernelFloatNeonDotprodInOrder(const KernelParamsFloat<8, 8>& params);
 
-#ifdef RUY_NEON_64
+#if RUY_PLATFORM(NEON_64)
 // A Float kernel for ARM64 Neon.
 template <>
 struct Kernel<Path::kNeon, float, float, float, BasicSpec<float, float>> {
@@ -512,7 +510,7 @@ struct Kernel<Path::kNeon, float, float, float, BasicSpec<float, float>> {
 };
 #endif
 
-#ifdef RUY_NEON_32
+#if RUY_PLATFORM(NEON_32)
 // A Float kernel for ARM32 Neon.
 template <>
 struct Kernel<Path::kNeon, float, float, float, BasicSpec<float, float>> {
@@ -559,7 +557,7 @@ struct Kernel<Path::kNeonDotprod, float, float, float,
   }
 };
 
-#endif  // ((defined RUY_NEON_64) || (defined RUY_NEON_32)) &&
+#endif  // (RUY_PLATFORM(NEON_64) || RUY_PLATFORM(NEON_32)) &&
         // (RUY_OPT_ENABLED(RUY_OPT_ASM)
 }  // namespace ruy
 

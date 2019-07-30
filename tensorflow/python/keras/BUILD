@@ -174,6 +174,7 @@ py_library(
         "engine/training_generator.py",
         "engine/training_utils.py",
         "engine/training_v2.py",
+        "engine/training_v2_utils.py",
         "metrics.py",  # Need base_layer
         "models.py",
         "utils/metrics_utils.py",
@@ -569,7 +570,7 @@ tf_py_test(
         "//tensorflow/python:client_testlib",
         "//tensorflow/python:nn_ops",
     ],
-    shard_count = 12,
+    shard_count = 16,
     tags = ["notsan"],
 )
 
@@ -714,6 +715,18 @@ tf_py_test(
 )
 
 tf_py_test(
+    name = "temporal_sample_weights_correctness_test",
+    size = "medium",
+    srcs = ["temporal_sample_weights_correctness_test.py"],
+    additional_deps = [
+        ":keras",
+        "//third_party/py/numpy",
+        "//tensorflow/python:client_testlib",
+    ],
+    shard_count = 12,
+)
+
+tf_py_test(
     name = "applications_test",
     size = "medium",
     srcs = ["applications/applications_test.py"],
@@ -742,6 +755,7 @@ tf_py_test(
     srcs = ["layers/tensorflow_op_layer_test.py"],
     additional_deps = [
         ":keras",
+        ":saving",
         "@absl_py//absl/testing:parameterized",
         "//tensorflow/python:client_testlib",
         "//tensorflow/python/eager:backprop",
@@ -1230,7 +1244,7 @@ tf_py_test(
         "//tensorflow/python:sparse_ops",
         "//tensorflow/python:sparse_tensor",
     ],
-    shard_count = 4,
+    shard_count = 8,
     tags = ["no_windows"],  # b/135752236
 )
 
@@ -1556,7 +1570,10 @@ tf_py_test(
         "//tensorflow/python:client_testlib",
     ],
     shard_count = 4,
-    tags = ["notsan"],
+    tags = [
+        "no_windows",
+        "notsan",
+    ],
 )
 
 tf_py_test(
@@ -1634,6 +1651,9 @@ tf_py_test(
         "//tensorflow/python:client_testlib",
     ],
     shard_count = 4,
+    tags = [
+        "no_windows",
+    ],
 )
 
 tf_py_test(
