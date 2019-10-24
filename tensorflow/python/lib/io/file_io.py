@@ -44,7 +44,7 @@ class FileIO(object):
 
   The constructor takes the following arguments:
   name: name of the file
-  mode: one of 'r', 'w', 'a', 'r+', 'w+', 'a+'. Append 'b' for bytes mode.
+  mode: one of `r`, `w`, `a`, `r+`, `w+`, `a+`. Append `b` for bytes mode.
 
   Can be used as an iterator to iterate over lines in the file.
 
@@ -113,10 +113,10 @@ class FileIO(object):
     Starts reading from current position in file.
 
     Args:
-      n: Read 'n' bytes if n != -1. If n = -1, reads to end of file.
+      n: Read `n` bytes if `n != -1`. If `n = -1`, reads to end of file.
 
     Returns:
-      'n' bytes of the file (or whole file) in bytes mode or 'n' bytes of the
+      `n` bytes of the file (or whole file) in bytes mode or `n` bytes of the
       string if in string (regular) mode.
     """
     self._preread_check()
@@ -128,8 +128,7 @@ class FileIO(object):
         pywrap_tensorflow.ReadFromStream(self._read_buf, length))
 
   @deprecation.deprecated_args(
-      None,
-      "position is deprecated in favor of the offset argument.",
+      None, "position is deprecated in favor of the offset argument.",
       "position")
   def seek(self, offset=None, whence=0, position=None):
     # TODO(jhseu): Delete later. Used to omit `position` from docs.
@@ -141,7 +140,7 @@ class FileIO(object):
       whence: Valid values for whence are:
         0: start of the file (default)
         1: relative to the current position of the file
-        2: relative to the end of file. offset is usually negative.
+        2: relative to the end of file. `offset` is usually negative.
     """
     # pylint: enable=g-doc-args
     self._preread_check()
@@ -169,8 +168,8 @@ class FileIO(object):
       else:
         raise errors.InvalidArgumentError(
             None, None,
-            "Invalid whence argument: {}. Valid values are 0, 1, or 2."
-            .format(whence))
+            "Invalid whence argument: {}. Valid values are 0, 1, or 2.".format(
+                whence))
       ret_status = self._read_buf.Seek(offset)
       pywrap_tensorflow.Set_TF_Status_from_Status(status, ret_status)
 
@@ -241,7 +240,6 @@ class FileIO(object):
         pywrap_tensorflow.Set_TF_Status_from_Status(status, ret_status)
     self._writable_file = None
 
-  @property
   def seekable(self):
     """Returns True as FileIO supports random access ops of seek()/tell()"""
     return True
@@ -294,7 +292,7 @@ def delete_file(filename):
 
   Raises:
     errors.OpError: Propagates any errors reported by the FileSystem API.  E.g.,
-    NotFoundError if the file does not exist.
+    `NotFoundError` if the file does not exist.
   """
   delete_file_v2(filename)
 
@@ -308,7 +306,7 @@ def delete_file_v2(path):
 
   Raises:
     errors.OpError: Propagates any errors reported by the FileSystem API.  E.g.,
-    NotFoundError if the path does not exist.
+    `NotFoundError` if the path does not exist.
   """
   pywrap_tensorflow.DeleteFile(compat.as_bytes(path))
 
@@ -319,14 +317,14 @@ def read_file_to_string(filename, binary_mode=False):
   Args:
     filename: string, path to a file
     binary_mode: whether to open the file in binary mode or not. This changes
-        the type of the object returned.
+      the type of the object returned.
 
   Returns:
     contents of the file as a string or bytes.
 
   Raises:
     errors.OpError: Raises variety of errors that are subtypes e.g.
-    NotFoundError etc.
+    `NotFoundError` etc.
   """
   if binary_mode:
     f = FileIO(filename, mode="rb")
@@ -397,14 +395,13 @@ def get_matching_files_v2(pattern):
 
 @tf_export(v1=["gfile.MkDir"])
 def create_dir(dirname):
-  """Creates a directory with the name 'dirname'.
+  """Creates a directory with the name `dirname`.
 
   Args:
     dirname: string, name of the directory to be created
 
-  Notes:
-    The parent directories need to exist. Use recursive_create_dir instead if
-    there is the possibility that the parent dirs don't exist.
+  Notes: The parent directories need to exist. Use `tf.io.gfile.makedirs`
+    instead if there is the possibility that the parent dirs don't exist.
 
   Raises:
     errors.OpError: If the operation fails.
@@ -414,14 +411,13 @@ def create_dir(dirname):
 
 @tf_export("io.gfile.mkdir")
 def create_dir_v2(path):
-  """Creates a directory with the name given by 'path'.
+  """Creates a directory with the name given by `path`.
 
   Args:
     path: string, name of the directory to be created
 
-  Notes:
-    The parent directories need to exist. Use recursive_create_dir instead if
-    there is the possibility that the parent dirs don't exist.
+  Notes: The parent directories need to exist. Use `tf.io.gfile.makedirs`
+    instead if there is the possibility that the parent dirs don't exist.
 
   Raises:
     errors.OpError: If the operation fails.
@@ -461,13 +457,13 @@ def recursive_create_dir_v2(path):
 
 @tf_export(v1=["gfile.Copy"])
 def copy(oldpath, newpath, overwrite=False):
-  """Copies data from oldpath to newpath.
+  """Copies data from `oldpath` to `newpath`.
 
   Args:
     oldpath: string, name of the file who's contents need to be copied
     newpath: string, name of the file to which to copy to
-    overwrite: boolean, if false its an error for newpath to be occupied by an
-        existing file.
+    overwrite: boolean, if false it's an error for `newpath` to be occupied by
+      an existing file.
 
   Raises:
     errors.OpError: If the operation fails.
@@ -477,13 +473,13 @@ def copy(oldpath, newpath, overwrite=False):
 
 @tf_export("io.gfile.copy")
 def copy_v2(src, dst, overwrite=False):
-  """Copies data from src to dst.
+  """Copies data from `src` to `dst`.
 
   Args:
     src: string, name of the file whose contents need to be copied
     dst: string, name of the file to which to copy to
-    overwrite: boolean, if false its an error for newpath to be occupied by an
-        existing file.
+    overwrite: boolean, if false it's an error for `dst` to be occupied by an
+      existing file.
 
   Raises:
     errors.OpError: If the operation fails.
@@ -500,7 +496,7 @@ def rename(oldname, newname, overwrite=False):
     oldname: string, pathname for a file
     newname: string, pathname to which the file needs to be moved
     overwrite: boolean, if false it's an error for `newname` to be occupied by
-        an existing file.
+      an existing file.
 
   Raises:
     errors.OpError: If the operation fails.
@@ -515,8 +511,8 @@ def rename_v2(src, dst, overwrite=False):
   Args:
     src: string, pathname for a file
     dst: string, pathname to which the file needs to be moved
-    overwrite: boolean, if false it's an error for `dst` to be occupied by
-        an existing file.
+    overwrite: boolean, if false it's an error for `dst` to be occupied by an
+      existing file.
 
   Raises:
     errors.OpError: If the operation fails.
@@ -538,7 +534,7 @@ def atomic_write_string_to_file(filename, contents, overwrite=True):
     filename: string, pathname for a file
     contents: string, contents that need to be written to the file
     overwrite: boolean, if false it's an error for `filename` to be occupied by
-        an existing file.
+      an existing file.
   """
   temp_pathname = filename + ".tmp" + uuid.uuid4().hex
   write_string_to_file(temp_pathname, contents)
@@ -657,15 +653,14 @@ def walk(top, in_order=True):
 
   Args:
     top: string, a Directory name
-    in_order: bool, Traverse in order if True, post order if False.
-
-  Errors that happen while listing directories are ignored.
+    in_order: bool, Traverse in order if True, post order if False.  Errors that
+      happen while listing directories are ignored.
 
   Yields:
     Each yield is a 3-tuple:  the pathname of a directory, followed by lists of
-    all its subdirectories and leaf files.
-    (dirname, [subdirname, subdirname, ...], [filename, filename, ...])
-    as strings
+    all its subdirectories and leaf files. That is, each yield looks like:
+    `(dirname, [subdirname, subdirname, ...], [filename, filename, ...])`.
+    Each item is a string.
   """
   return walk_v2(top, in_order)
 
@@ -679,14 +674,13 @@ def walk_v2(top, topdown=True, onerror=None):
     topdown: bool, Traverse pre order if True, post order if False.
     onerror: optional handler for errors. Should be a function, it will be
       called with the error as argument. Rethrowing the error aborts the walk.
-
-  Errors that happen while listing directories are ignored.
+      Errors that happen while listing directories are ignored.
 
   Yields:
     Each yield is a 3-tuple:  the pathname of a directory, followed by lists of
-    all its subdirectories and leaf files.
-    (dirname, [subdirname, subdirname, ...], [filename, filename, ...])
-    as strings
+    all its subdirectories and leaf files. That is, each yield looks like:
+    `(dirname, [subdirname, subdirname, ...], [filename, filename, ...])`.
+    Each item is a string.
   """
   top = compat.as_str_any(top)
   try:
@@ -759,7 +753,7 @@ def filecmp(filename_a, filename_b):
   We check size first and return False quickly if the files are different sizes.
   If they are the same size, we continue to generating a crc for the whole file.
 
-  You might wonder: why not use Python's filecmp.cmp() instead? The answer is
+  You might wonder: why not use Python's `filecmp.cmp()` instead? The answer is
   that the builtin library is not robust to the many different filesystems
   TensorFlow runs on, and so we here perform a similar comparison with
   the more robust FileIO.

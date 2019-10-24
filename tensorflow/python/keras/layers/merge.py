@@ -41,6 +41,7 @@ class _Merge(Layer):
   def __init__(self, **kwargs):
     super(_Merge, self).__init__(**kwargs)
     self.supports_masking = True
+    self._supports_ragged_inputs = True
 
   def _merge_function(self, inputs):
     raise NotImplementedError
@@ -235,9 +236,8 @@ class Add(_Merge):
       x1 = keras.layers.Dense(8, activation='relu')(input1)
       input2 = keras.layers.Input(shape=(32,))
       x2 = keras.layers.Dense(8, activation='relu')(input2)
-      added = keras.layers.Add()([x1, x2])  # equivalent to added =
-      keras.layers.add([x1, x2])
-
+      # equivalent to `added = keras.layers.add([x1, x2])`
+      added = keras.layers.Add()([x1, x2])
       out = keras.layers.Dense(4)(added)
       model = keras.models.Model(inputs=[input1, input2], outputs=out)
   ```
@@ -479,6 +479,7 @@ class Dot(_Merge):
     self.normalize = normalize
     self.supports_masking = True
     self._reshape_required = False
+    self._supports_ragged_inputs = False
 
   @tf_utils.shape_type_conversion
   def build(self, input_shape):
@@ -647,14 +648,32 @@ def average(inputs, **kwargs):
 
 @keras_export('keras.layers.maximum')
 def maximum(inputs, **kwargs):
-  """Functional interface to the `Maximum` layer.
+  """Functional interface to the `Maximum` layer that computes
+
+     the maximum (element-wise) list of `inputs`.
+
+  For example:
+
+  ```python
+  input1 = tf.keras.layers.Input(shape=(16,))
+  x1 = tf.keras.layers.Dense(8, activation='relu')(input1) #shape=(None, 8)
+  input2 = tf.keras.layers.Input(shape=(32,))
+  x2 = tf.keras.layers.Dense(8, activation='relu')(input2) #shape=(None, 8)
+  max_inp=tf.keras.layers.maximum([x1,x2]) #shape=(None, 8)
+  out = tf.keras.layers.Dense(4)(max_inp)
+  model = tf.keras.models.Model(inputs=[input1, input2], outputs=out)
+  ```
 
   Arguments:
-      inputs: A list of input tensors (at least 2).
+      inputs: A list of input tensors (at least 2) of same shape.
       **kwargs: Standard layer keyword arguments.
 
   Returns:
-      A tensor, the element-wise maximum of the inputs.
+      A tensor (of same shape as input tensor) with the element-wise
+      maximum of the inputs.
+
+  Raises:
+      ValueError: If input tensors are of different shape.
   """
   return Maximum(**kwargs)(inputs)
 

@@ -62,6 +62,7 @@ class _SavedModelBuilder(object):
   with the shared set of variables and assets.
 
   Typical usage for the `SavedModelBuilder`:
+
   ```python
   ...
   builder = tf.compat.v1.saved_model.Builder(export_dir)
@@ -154,14 +155,14 @@ class _SavedModelBuilder(object):
   def _validate_tensor_info(self, tensor_info):
     """Validates the `TensorInfo` proto.
 
-    Checks if the `encoding` (`name` or `coo_sparse`) and `dtype` fields exist
-    and are non-empty.
+    Checks if the `encoding` (`name` or `coo_sparse` or `type_spec`) and
+    `dtype` fields exist and are non-empty.
 
     Args:
       tensor_info: `TensorInfo` protocol buffer to validate.
 
     Raises:
-      AssertionError: If the `name` or `dtype` fields of the supplied
+      AssertionError: If the `encoding` or `dtype` fields of the supplied
           `TensorInfo` proto are not populated.
     """
     if tensor_info is None:
@@ -174,7 +175,10 @@ class _SavedModelBuilder(object):
           "All TensorInfo protos used in the SignatureDefs must have one of "
           "the 'encoding' fields (e.g., name or coo_sparse) set: %s"
           % tensor_info)
-    if tensor_info.dtype is types_pb2.DT_INVALID:
+    if tensor_info.WhichOneof("encoding") == "composite_tensor":
+      for component in tensor_info.composite_tensor.components:
+        self._validate_tensor_info(component)
+    elif tensor_info.dtype == types_pb2.DT_INVALID:
       raise AssertionError(
           "All TensorInfo protos used in the SignatureDefs must have the dtype "
           "field set: %s" % tensor_info)
@@ -395,7 +399,12 @@ class _SavedModelBuilder(object):
     in serialized format.
 
     Args:
-      as_text: Writes the SavedModel protocol buffer in text format to disk.
+      as_text: Writes the SavedModel protocol buffer in text format to
+        disk. Protocol buffers in text format are useful for debugging, but
+        parsing fails when it encounters an unknown field and so is not forward
+        compatible. This means changes to TensorFlow may prevent deployment of
+        new text format SavedModels to existing serving binaries. Do not deploy
+        `as_text` SavedModels to production.
 
     Returns:
       The path to which the SavedModel protocol buffer was written.

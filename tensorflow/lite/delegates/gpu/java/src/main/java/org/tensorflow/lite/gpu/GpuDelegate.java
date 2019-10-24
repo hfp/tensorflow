@@ -17,9 +17,18 @@ package org.tensorflow.lite.gpu;
 
 import java.io.Closeable;
 import org.tensorflow.lite.Delegate;
-import org.tensorflow.lite.Tensor;
 
-/** {@link Delegate} for GPU inference. */
+/**
+ * {@link Delegate} for GPU inference.
+ *
+ * <p>Note: When calling {@code Interpreter.modifyGraphWithDelegate()}/
+ * {@code Interpreter.Options.addDelegate()} and {@code Interpreter.run()}, the caller must have an
+ * {@code EGLContext} in the <b>current thread</b> and {@code Interpreter.run()} must be called from
+ * the same {@code EGLContext}. If an {@code EGLContext} does not exist, the delegate will
+ * internally create one, but then the developer must ensure that {@code Interpreter.run()} is
+ * always called from the same thread in which {@code Interpreter.modifyGraphWithDelegate()} was
+ * called.
+ */
 public class GpuDelegate implements Delegate, Closeable {
 
   private static final long INVALID_DELEGATE_HANDLE = 0;
@@ -27,28 +36,53 @@ public class GpuDelegate implements Delegate, Closeable {
 
   private long delegateHandle;
 
-  public GpuDelegate() {
-    delegateHandle = createDelegate();
+  /** Delegate options. */
+  public static final class Options {
+    public Options() {}
+
+    /**
+     * Delegate will be used only once, therefore, bootstrap/init time should be taken into account.
+     */
+    public static final int INFERENCE_PREFERENCE_FAST_SINGLE_ANSWER = 0;
+
+    /**
+     * Prefer maximizing the throughput. Same delegate will be used repeatedly on multiple inputs.
+     */
+    public static final int INFERENCE_PREFERENCE_SUSTAINED_SPEED = 1;
+
+    /**
+     * Sets whether precision loss is allowed.
+     *
+     * @param precisionLossAllowed When `true` (default), the GPU may quantify tensors, downcast
+     *     values, process in FP16. When `false`, computations are carried out in 32-bit floating
+     *     point.
+     */
+    public Options setPrecisionLossAllowed(boolean precisionLossAllowed) {
+      this.precisionLossAllowed = precisionLossAllowed;
+      return this;
+    }
+
+    /**
+     * Sets the inference preference for precision/compilation/runtime tradeoffs.
+     *
+     * @param preference One of `INFERENCE_PREFERENCE_FAST_SINGLE_ANSWER` (default),
+     *     `INFERENCE_PREFERENCE_SUSTAINED_SPEED`.
+     */
+    public Options setInferencePreference(int preference) {
+      this.inferencePreference = preference;
+      return this;
+    }
+
+    boolean precisionLossAllowed = true;
+    int inferencePreference = INFERENCE_PREFERENCE_FAST_SINGLE_ANSWER;
   }
 
-  /**
-   * Advanced: Binds a GL SSBO to an input or an output tensor in the initialized delegate.
-   *
-   * <p>The bound buffer should have sufficient storage to accommodate all elements of the tensor.
-   *
-   * <p><b>Note:</b> This method must be called *before* calling the delegate instance is installed
-   * in the {@link Interpreter}.
-   *
-   * <p>WARNING: This is an experimental API and subject to change.
-   *
-   * @param tensor The input or output {@link Tensor} to bind to the buffer object.
-   * @param ssbo The GL buffer object to bind to the tensor. See also {@link
-   *     Interpreter.Options#setAllowBufferHandleOutput()} for details on allowing zero-copy output
-   *     when GL textures are bound to output tensors.
-   * @return Whether the operation succeeded.
-   */
-  public boolean bindGlBufferToTensor(Tensor tensor, int ssbo) {
-    return bindGlBufferToTensor(delegateHandle, tensor.index(), ssbo);
+  public GpuDelegate(Options options) {
+    delegateHandle = createDelegate(options.precisionLossAllowed, options.inferencePreference);
+  }
+
+  public GpuDelegate() {
+    this(new Options());
   }
 
   @Override
@@ -73,10 +107,7 @@ public class GpuDelegate implements Delegate, Closeable {
     System.loadLibrary(TFLITE_GPU_LIB);
   }
 
-  private static native long createDelegate();
+  private static native long createDelegate(boolean precisionLossAllowed, int preference);
 
   private static native void deleteDelegate(long delegateHandle);
-
-  private static native boolean bindGlBufferToTensor(
-      long delegateHandle, int tensorIndex, int ssbo);
 }

@@ -147,7 +147,8 @@ void TF_Run_wrapper_helper(TF_DeprecatedSession* session, const char* handle,
       Set_TF_Status_from_Status(out_status, s);
       return;
     }
-    py_outputs_safe.emplace_back(make_safe(py_array));
+    py_outputs_safe.emplace_back(
+        make_safe(PyArray_Return(reinterpret_cast<PyArrayObject*>(py_array))));
   }
 
   // 6. If we reach this point, we have successfully built a list of objects
@@ -274,7 +275,8 @@ void RunCallableHelper(tensorflow::Session* session, int64_t handle,
       Set_TF_Status_from_Status(out_status, s);
       return;
     }
-    py_outputs_safe.push_back(make_safe(py_array));
+    py_outputs_safe.push_back(
+        make_safe(PyArray_Return(reinterpret_cast<PyArrayObject*>(py_array))));
   }
 
   // If we reach this point, we have successfully built a list of objects
@@ -423,7 +425,8 @@ void TF_SessionRun_wrapper_helper(TF_Session* session, const char* handle,
       Set_TF_Status_from_Status(out_status, s);
       return;
     }
-    py_outputs_safe.emplace_back(make_safe(py_array));
+    py_outputs_safe.emplace_back(
+        make_safe(PyArray_Return(reinterpret_cast<PyArrayObject*>(py_array))));
   }
 
   // If we reach this point, we have successfully built a list of objects so we
@@ -543,9 +546,7 @@ void TF_SessionPRun_wrapper(TF_Session* session, const char* handle,
 std::vector<TF_Output> GetOperationInputs(TF_Operation* oper) {
   int num_inputs = TF_OperationNumInputs(oper);
   std::vector<TF_Output> inputs(num_inputs);
-  for (int i = 0; i < num_inputs; ++i) {
-    inputs[i] = TF_OperationInput({oper, i});
-  }
+  TF_OperationAllInputs(oper, inputs.data(), inputs.size());
   return inputs;
 }
 
@@ -672,7 +673,7 @@ PyObject* TF_TryEvaluateConstant_wrapper(TF_Graph* graph, TF_Output output,
   Status s = TF_TensorToPyArray(std::move(safe_result_tensor), &out);
   Set_TF_Status_from_Status(status, s);
   if (!s.ok()) Py_RETURN_NONE;
-  return out;
+  return PyArray_Return(reinterpret_cast<PyArrayObject*>(out));
 }
 
 }  // namespace tensorflow

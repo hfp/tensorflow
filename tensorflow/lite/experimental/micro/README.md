@@ -10,23 +10,25 @@ detection model, takes up a total of 22KB.
 ## Table of Contents
 
 -   [Getting Started](#getting-started)
-
+    *   [Examples](#examples)
     *   [Getting Started with Portable Reference Code](#getting-started-with-portable-reference-code)
     *   [Building Portable Reference Code using Make](#building-portable-reference-code-using-make)
     *   [Building for the "Blue Pill" STM32F103 using Make](#building-for-the-blue-pill-stm32f103-using-make)
-    *   [Building for "Hifive1" SiFive FE310 development board using Make](#building-for-hifive1-sifive-fe310-development-board-using-make)
+    *   [Building for "Hifive1" SiFive FE310 development board using Make](#building-for-hifive1-sifive-fe310-development-board)
     *   [Building for Ambiq Micro Apollo3Blue EVB using Make](#building-for-ambiq-micro-apollo3blue-evb-using-make)
         *   [Additional Apollo3 Instructions](#additional-apollo3-instructions)
     *   [Building for the Eta Compute ECM3531 EVB using Make](#Building-for-the-Eta-Compute-ECM3531-EVB-using-Make)
 
 -   [Goals](#goals)
 
--   [Generating Project Files](#generating-project-#files)
+-   [Generating Project Files](#generating-project-files)
+
+-   [Generating Arduino Libraries](#generating-arduino-libraries)
 
 -   [How to Port TensorFlow Lite Micro to a New Platform](#how-to-port-tensorflow-lite-micro-to-a-new-platform)
 
     *   [Requirements](#requirements)
-    *   [Getting Started](getting-started)
+    *   [Getting Started](#getting-started-1)
     *   [Troubleshooting](#troubleshooting)
     *   [Optimizing for your Platform](#optimizing-for-your-platform)
     *   [Code Module Organization](#code-module-organization)
@@ -36,6 +38,36 @@ detection model, takes up a total of 22KB.
     *   [Implementing More Optimizations](#implementing-more-optimizations)
 
 # Getting Started
+
+## Examples
+
+The fastest way to learn how TensorFlow Lite for Microcontrollers works is by
+exploring and running our examples, which include application code and trained
+TensorFlow models.
+
+The following examples are available:
+
+- [hello_world](https://github.com/tensorflow/tensorflow/tree/master/tensorflow/lite/experimental/micro/examples/hello_world)
+  * Uses a very simple model, trained to reproduce a sine wave, to control an
+    LED or animation
+  * Application code for Arduino, SparkFun Edge, and STM32F746
+  * Colab walkthrough of model training and conversion
+
+- [micro_speech](https://github.com/tensorflow/tensorflow/tree/master/tensorflow/lite/experimental/micro/examples/micro_speech)
+  * Uses a 20 KB model to recognize keywords in spoken audio
+  * Application code for Arduino, SparkFun Edge, and STM32F746
+  * Python scripts for model training and conversion
+
+- [person_detection](https://github.com/tensorflow/tensorflow/tree/master/tensorflow/lite/experimental/micro/examples/person_detection)
+  * Uses a 250 KB model to recognize presence or absence of a person in images
+    captured by a camera
+  * Application code for SparkFun Edge
+
+- [magic_wand](https://github.com/tensorflow/tensorflow/tree/master/tensorflow/lite/experimental/micro/examples/magic_wand)
+  * Uses a 20 KB model to recognize gestures using accelerometer data
+  * Application code for Arduino and SparkFun Edge
+
+## Pre-generated Project Files
 
 One of the challenges of embedded software development is that there are a lot
 of different architectures, devices, operating systems, and build systems. We
@@ -47,7 +79,7 @@ project files that you can download for the following platforms:
 
 Device                                                                                         | Mbed                                                                           | Keil                                                                           | Make/GCC
 ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ | --------
-[STM32F746G Discovery Board](https://www.st.com/en/evaluation-tools/32f746gdiscovery.html)     | [Download](https://drive.google.com/open?id=1OtgVkytQBrEYIpJPsE8F6GUKHPBS3Xeb) | -                                                                              | [Download](https://drive.google.com/open?id=1u46mTtAMZ7Y1aD-He1u3R8AE4ZyEpnOl)
+[STM32F746G Discovery Board](https://www.st.com/en/evaluation-tools/32f746gdiscovery.html)     | [Download](https://drive.google.com/open?id=1OtgVkytQBrEYIpJPsE8F6GUKHPBS3Xeb) | -                                                                              | [Instructions](#generating-project-files)
 ["Blue Pill" STM32F103-compatible development board](https://github.com/google/stm32_bare_lib) | -                                                                              | -                                                                              | [Instructions](#building-for-the-blue-pill-stm32f103-using-make)
 [Ambiq Micro Apollo3Blue EVB using Make](https://ambiqmicro.com/apollo-ultra-low-power-mcus/)  | -                                                                              | -                                                                              | [Instructions](#building-for-ambiq-micro-apollo3blue-evb-using-make)
 [Generic Keil uVision Projects](http://www2.keil.com/mdk5/uvision/)                            | -                                                                              | [Download](https://drive.google.com/open?id=1Lw9rsdquNKObozClLPoE5CTJLuhfh5mV) | -
@@ -91,7 +123,7 @@ run them manually. For example, here's how to run the depthwise convolution
 test, and its output:
 
 ```
-tensorflow/lite/experimental/micro/tools/make/gen/linux_x86_64/bin/tensorflow/lite/experimental/micro/kernels/depthwise_conv_test
+tensorflow/lite/experimental/micro/tools/make/gen/linux_x86_64/bin/depthwise_conv_test
 
 Testing SimpleTest
 Testing SimpleTestQuantized
@@ -162,7 +194,7 @@ test, but through the emulated device test harness, with the following command:
 
 ```
 tensorflow/lite/experimental/micro/testing/test_bluepill_binary.sh \
-tensorflow/lite/experimental/micro/tools/make/gen/bluepill_cortex-m3/bin/tensorflow/lite/experimental/micro/kernels/depthwise_conv_test \
+tensorflow/lite/experimental/micro/tools/make/gen/bluepill_cortex-m3/bin/depthwise_conv_test \
 '~~~ALL TESTS PASSED~~~'
 
 ```
@@ -189,7 +221,7 @@ LOGS:
 03:27:32.4839 [DEBUG] cpu.uartSemihosting: [+41µs host +0s virt 0s virt from start]   ~~~ALL TESTS PASSED~~~
 03:27:32.4839 [DEBUG] cpu.uartSemihosting: [+5µs host +0s virt 0s virt from start]
 ...
-tensorflow/lite/experimental/micro/tools/make/gen/bluepill_cortex-m3/bin/tensorflow/lite/experimental/micro/kernels/depthwise_conv_test: PASS
+tensorflow/lite/experimental/micro/tools/make/gen/bluepill_cortex-m3/bin/depthwise_conv_test: PASS
 ```
 
 There's a lot of output here, but you should be able to see that the same tests
@@ -264,13 +296,13 @@ You should see the following log with the magic string `~~~ALL TEST PASSED~~~`:
 
 ## Building for Ambiq Micro Apollo3Blue EVB using Make
 
-Follow these steps to get the pushbutton yes/no example working on Apollo 3:
+Follow these steps to get the micro_speech yes example working on Apollo 3 EVB:
 
 1.  Make sure to run the "Building Portable Reference Code using Make" section
     before performing the following steps
 2.  Compile the project with the following command: make -f
     tensorflow/lite/experimental/micro/tools/make/Makefile TARGET=apollo3evb
-    pushbutton_cmsis_speech_test_bin
+    micro_speech_bin
 3.  Install [Segger JLink tools](https://www.segger.com/downloads/jlink/)
 4.  Connect the Apollo3 EVB (with mic shield in slot 3 of Microbus Shield board)
     to the computer and power it on.
@@ -281,39 +313,30 @@ Follow these steps to get the pushbutton yes/no example working on Apollo 3:
         connection"
 6.  Back in the original terminal, run the program via the debugger
     1.  Navigate to
-        tensorflow/lite/experimental/micro/examples/micro_speech/apollo3
+        tensorflow/lite/experimental/micro/examples/micro_speech/apollo3evb
     2.  Start gdb by entering the following command: arm-none-eabi-gdb
     3.  Run the command script by entering the following command: source
-        pushbutton_cmsis_scores.cmd. This script does the following:
-        1.  Load the binary created in step 6
-        2.  Set a breakpoint after inference scores have been computed
-        3.  Tell the debugger what variables should be printed out at this
-            breakpoint
-        4.  Begin program execution
-        5.  Press Ctrl+c to exit
-    4.  Press BTN2. An LED will flash for 1 second. Speak your utterance during
-        this one second
-    5.  The debugger will print out four numbers. They are the probabilites for
-        1.  no speech
-        2.  unknown speech
-        3.  yes
-        4.  no
-    6.  The EVB LEDs will indicate detection.
-        1.  LED0 (rightmost LED) - ON when capturing 1sec of audio
-        2.  LED1 - ON when detecting silence
-        3.  LED2 - ON when detecting UNKNOWN utterance
-        4.  LED3 - ON when detecting YES utterance
-        5.  LED4 (leftmost LED) - ON when detecting NO utterance
+        micro_speech.cmd. This script does the following:
+        1.  Load the binary created in step 2
+        2.  Reset
+        3.  Begin program execution
+        4.  Press Ctrl+c to exit
+    4.  The EVB LEDs will indicate detection.
+        1.  LED0 (rightmost LED) - ON when Digital MIC interface is initialized
+        2.  LED1 - Toggles after each inference
+        3.  LED2 thru 4 - "Ramp ON" when "Yes" is detected
+    5.  Say "Yes"
 
 ### Additional Apollo3 Instructions
 
-To flash a part with JFlash Lite, do the following: 
+To flash a part with JFlash Lite, do the following:
 
-1. At the command line: JFlashLiteExe 
-2. Device = AMA3B1KK-KBR 
-3. Interface = SWD at 1000 kHz 
-4. Data file = `tensorflow/lite/experimental/micro/tools/make/gen/apollo3evb_cortex-m4/bin/pushbutton_cmsis_speech_test.bin`
-5. Prog Addr = 0x0000C000
+1.  At the command line: JFlashLiteExe
+2.  Device = AMA3B1KK-KBR
+3.  Interface = SWD at 1000 kHz
+4.  Data file =
+    `tensorflow/lite/experimental/micro/tools/make/gen/apollo3evb_cortex-m4/bin/micro_speech.bin`
+5.  Prog Addr = 0x0000C000
 
 ## Building for the Eta Compute ECM3531 EVB using Make
 
@@ -322,7 +345,7 @@ To flash a part with JFlash Lite, do the following:
     to down load the Tensorflow source code and the support libraries \(but do
     not run the make command shown there.\)
 2.  Download the Eta Compute SDK, version 0.0.17. Contact info@etacompute.com
-3.  You will need the the Arm compiler arm-none-eabi-gcc, version 7.3.1
+3.  You will need the Arm compiler arm-none-eabi-gcc, version 7.3.1
     20180622, release ARM/embedded-7-branch revision 261907, 7-2018-q2-update.
     This compiler is downloaded through make.
 4.  Edit the file
@@ -359,6 +382,57 @@ To flash a part with JFlash Lite, do the following:
     &nbsp;&nbsp;&nbsp;&nbsp;cd
     tensorflow/lite/experimental/micro/tools/make/targets/ecm3531 \
     &nbsp;&nbsp;&nbsp;&nbsp;./flash_program executable_name to load into flash.
+
+## Implement target optimized kernels
+
+The reference kernels in tensorflow/lite/experimental/micro/kernels are
+implemented in pure C/C++. It might not utilize all HW architecture specific
+optimizations, such as DSP instructions etc. The instructions below provides an
+example on how to compile an external lib with HW architecture specific
+optimizations and link it with the microlite lib.
+
+### CMSIS-NN optimized kernels (---under development---)
+
+To utilize the CMSIS-NN optimized kernels, choose your target, e.g. Bluepill,
+and build with:
+
+```
+make -f tensorflow/lite/experimental/micro/tools/make/Makefile TAGS=cmsis-nn TARGET=bluepill test
+```
+
+That will build the microlite lib including CMSIS-NN optimized kernels based on
+the version downloaded by 'download_dependencies.sh', so make sure you have run
+this script. If you want to utilize another version of CMSIS, clone it to a
+custom location run the following command:
+
+```
+make -f tensorflow/lite/experimental/micro/tools/make/Makefile CMSIS_PATH=<CUSTOM_LOCATION> TAGS=cmsis-nn TARGET=bluepill test
+```
+
+To test the optimized kernel(s) on your target platform using mbed (depthwise
+conv in this example), follow these steps:
+
+1.  Clone CMSIS to a custom location (<CUSTOM_LOCATION>) url:
+    https://github.com/ARM-software/CMSIS_5.git Make sure you're on the
+    development branch.
+2.  Generate the project for depthwise conv mbed test: `make -f
+    tensorflow/lite/experimental/micro/tools/make/Makefile TAGS=cmsis-nn
+    CMSIS_PATH=<CUSTOM_LOCATION> generate_depthwise_conv_test_mbed_project`
+3.  Go to the generated mbed folder: `cd
+    tensorflow/lite/experimental/micro/tools/make/gen/linux_x86_64/prj/depthwise_conv_test/mbed`
+4.  Follow the steps in README_MBED.md to setup the environment. Or simply do:
+    `mbed config root . mbed deploy python -c 'import fileinput, glob; for
+    filename in glob.glob("mbed-os/tools/profiles/*.json"): for line in
+    fileinput.input(filename, inplace=True):
+    print(line.replace("\"-std=gnu++98\"","\"-std=gnu++11\",
+    \"-fpermissive\""))'`
+5.  Compile and flash. The 'auto' flag requires your target to be plugged in.
+    `mbed compile -m auto -t GCC_ARM -f --source . --source
+    <CUSTOM_LOCATION>/CMSIS/NN/Include --source
+    <CUSTOM_LOCATION>/CMSIS/NN/Source --source
+    <CUSTOM_LOCATION>/CMSIS/DSP/Include --source
+    <CUSTOM_LOCATION>/CMSIS/Core/Include -DARM_MATH_DSP -DARM_MATH_LOOPUNROLL
+    -j8`
 
 ## Goals
 
@@ -483,7 +557,7 @@ auto-generated for any target you can compile using the main Make system, using
 a command like this:
 
 ```
-make -f tensorflow/lite/experimental/micro/tools/make/Makefile TARGET=mbed TAGS="CMSIS disco_f746ng" generate_micro_speech_mbed_project
+make -f tensorflow/lite/experimental/micro/tools/make/Makefile TARGET=mbed TAGS="disco_f746ng" generate_micro_speech_mbed_project
 ```
 
 This will create a folder in
@@ -492,6 +566,25 @@ that contains the source and header files, some Mbed configuration files, and a
 README. You should then be able to copy this directory to another machine, and
 use it just like any other Mbed project. There's more information about project
 files [below](#working-with-generated-projects).
+
+## Generating Arduino Libraries
+
+It's possible to use the Arduino Desktop IDE to build TFL Micro targets for
+Arduino devices. The source code is packaged as a .zip archive that you can add
+in the IDE by going to Sketch->Include Library->Add .ZIP Library... Once you've
+added the library, you can then go to File->Examples->TensorFlowLite to find a
+simple sketches that you can use to build the examples.
+
+You can generate the zip file from the source code here in git by running the
+following command:
+
+```
+https://github.com/tensorflow/tensorflow/blob/master/tensorflow/lite/experimental/micro/tools/ci_build/test_arduino.sh
+```
+
+The resulting library can be found in `tensorflow/lite/experimental/micro/tools/make/gen/arduino_x86_64/prj/tensorflow_lite.zip`.
+This generates a library that includes all of the examples as sketches, along
+with the framework code you need to run your own examples.
 
 ## How to Port TensorFlow Lite Micro to a New Platform
 
@@ -573,7 +666,7 @@ As mentioned above, the one function you will need to implement for a completely
 new platform is debug logging. If your device is just a variation on an existing
 platform you may be able to reuse code that's already been written. To
 understand what's available, begin with the default reference implementation at
-[tensorflow/lite/experimental/micro/debug_log.cc](https://github.com/tensorflow/tensorflow/blob/master/tensorflow/lite/experimental/micro/debug_log.cc]),
+[tensorflow/lite/experimental/micro/debug_log.cc](https://github.com/tensorflow/tensorflow/blob/master/tensorflow/lite/experimental/micro/debug_log.cc),
 which uses fprintf and stderr. If your platform has this level of support for
 the C standard library in its toolchain, then you can just reuse this.
 Otherwise, you'll need to do some research into how your platform and device can
@@ -858,7 +951,7 @@ git commit -a -m "Added DebugLog() support for <your platform>"
 git push origin master
 ```
 
-Then go back to https://github.com/<your account>/tensorflow, and choose "New
+Then go back to `https://github.com/<your account>/tensorflow`, and choose "New
 Pull Request" near the top. You should then be able to go through the standard
 TensorFlow PR process to get your change added to the main repository, and
 available to the rest of the community!

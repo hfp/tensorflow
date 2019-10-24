@@ -15,6 +15,8 @@ limitations under the License.
 
 // This test contains cheap test cases, completes in a few seconds.
 
+#include <vector>
+
 #include "tensorflow/lite/experimental/ruy/test.h"
 
 namespace ruy {
@@ -56,7 +58,7 @@ TEST(RuyTest, TestSquareMuls) {
   };
 
   for (int size : sizes) {
-    TestPackedLinearRCC<TestSetType>(size, size, size);
+    TestRCC<TestSetType>(size, size, size);
     TestLinearAllOrders<TestSetType>(size, size, size);
   }
 }
@@ -73,7 +75,8 @@ TEST(RuyTest, TestMiscMuls) {
 }
 
 TEST(RuyTest, TestDeepMuls) {
-  TestPackedLinearRCC<TestSetType>(1, 50001, 1);
+  // TODO(b/137649322): clarify what's the max allowed matrix size.
+  TestRCC<TestSetType>(1, 32767, 1);
   TestLinearAllOrders<TestSetType>(5, 5001, 4);
   TestLinearAllOrders<TestSetType>(9, 1025, 10);
 }
@@ -94,10 +97,14 @@ TEST(RuyTest, TestNarrowMuls) {
   }
 }
 
-TEST(RuyTest, TestNonLinear) {
-  TestNonLinearAllOrders<TestSetType>(10, 11, 12, 2, 1, 4);
-  TestNonLinearAllOrders<TestSetType>(10, 12, 11, 2, 4, 1);
-  TestNonLinearAllOrders<TestSetType>(8, 2, 4, 8, 2, 4);
-  TestNonLinearAllOrders<TestSetType>(24, 32, 16, 8, 16, 4);
+TEST(RuyTest, TestGEMV) {
+  for (int size = 1; size < 1024; size *= 2) {
+    for (int depth = 1; depth < 500; depth += 47) {
+      TestLinearAllOrders<TestSetType>(size, depth, 1);
+    }
+  }
+  TestLinearAllOrders<TestSetType>(5, 5001, 1);
+  TestLinearAllOrders<TestSetType>(8193, 17, 1);
 }
+
 }  // namespace ruy

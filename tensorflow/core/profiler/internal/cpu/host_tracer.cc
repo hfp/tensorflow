@@ -22,6 +22,7 @@ limitations under the License.
 #include "tensorflow/core/profiler/internal/profiler_interface.h"
 #include "tensorflow/core/profiler/internal/traceme_recorder.h"
 #include "tensorflow/core/protobuf/config.pb.h"
+#include "tensorflow/core/util/env_var.h"
 
 namespace tensorflow {
 namespace profiler {
@@ -45,6 +46,10 @@ class HostTracer : public ProfilerInterface {
   // Populates user traces and thread names in response.
   // The user traces and thread names are in no particular order.
   Status CollectData(RunMetadata* run_metadata) override;
+
+  profiler::DeviceType GetDeviceType() override {
+    return profiler::DeviceType::kCpu;
+  }
 
  private:
   // Level of host tracing.
@@ -85,8 +90,8 @@ Status HostTracer::Stop() {
 constexpr char kUserMetadataMarker = '#';
 
 Status HostTracer::CollectData(RunMetadata* run_metadata) {
-  if (events_.empty() && recording_) {
-    events_ = TraceMeRecorder::Collect();
+  if (recording_) {
+    return Status(error::INTERNAL, "TraceMeRecorder not stopped");
   }
   // Pair up start and end events, and add complete events to trace_entries.
   absl::flat_hash_map<uint64, uint64> end_times;
@@ -140,13 +145,19 @@ Status HostTracer::CollectData(RunMetadata* run_metadata) {
 }  // namespace
 
 // Not in anonymous namespace for testing purposes.
-std::unique_ptr<ProfilerInterface> CreateHostTracer(const ProfilerContext*) {
-  int host_trace_level = 2;
-  return absl::make_unique<HostTracer>(host_trace_level);
+std::unique_ptr<ProfilerInterface> CreateHostTracer(
+    const profiler::ProfilerOptions& options) {
+  if (options.host_tracer_level == 0) return nullptr;
+  return absl::make_unique<HostTracer>(options.host_tracer_level);
 }
 
 auto register_host_tracer_factory = [] {
-  RegisterProfilerFactory(&CreateHostTracer);
+  bool enable;
+
+  TF_CHECK_OK(ReadBoolFromEnvVar("TF_ENABLE_OSS_CPU_PROFILER", true, &enable));
+  if (enable) {
+    RegisterProfilerFactory(&CreateHostTracer);
+  }
   return 0;
 }();
 

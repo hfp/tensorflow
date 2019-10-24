@@ -15,8 +15,6 @@ limitations under the License.
 
 #include "tensorflow/lite/experimental/ruy/allocator.h"
 
-#include <cstdlib>
-
 #include <gtest/gtest.h>
 
 namespace ruy {
@@ -70,6 +68,30 @@ TEST(AllocatorTest, ManySmallAllocations) {
     }
     allocator.FreeAll();
   }
+}
+
+TEST(AllocatorTest, DestructorHandlesMainBumpPtr) {
+  // This is a white-box test.
+  Allocator allocator;
+  allocator.AllocateBytes(1);
+  allocator.FreeAll();
+  // After the call to FreeAll, the allocator will consolidate all of the memory
+  // into the main bump-ptr allocator's block, which we then expect to be freed
+  // in the destructor.
+  //
+  // We have no test assertions -- we primarily expect that this trigger a leak
+  // checker and cause the test to fail.
+}
+
+TEST(AllocatorTest, DestructorHandlesFallbackBlocks) {
+  // This is a white-box test.
+  Allocator allocator;
+  // Since we just created the allocator, this will allocate a fallback block,
+  // which we then expect to be freed in the destructor.
+  //
+  // We have no test assertions -- we primarily expect that this trigger a leak
+  // checker and cause the test to fail.
+  allocator.AllocateBytes(1);
 }
 
 }  // namespace

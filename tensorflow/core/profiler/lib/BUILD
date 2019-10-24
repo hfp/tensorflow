@@ -1,19 +1,15 @@
+load(
+    "//tensorflow:tensorflow.bzl",
+    "tf_cuda_library",
+)
+load("@local_config_cuda//cuda:build_defs.bzl", "if_cuda")
+
 package(
     default_visibility = [
         "//tensorflow:internal",
         "//tensorflow_models:__subpackages__",
     ],
-)
-
-licenses(["notice"])  # Apache 2.0
-
-load(
-    "//tensorflow:tensorflow.bzl",
-    "tf_cuda_library",
-)
-load(
-    "//tensorflow/core:platform/default/build_config.bzl",
-    "tf_additional_profiler_lib_deps",
+    licenses = ["notice"],  # Apache 2.0
 )
 
 tf_cuda_library(
@@ -27,7 +23,9 @@ tf_cuda_library(
     visibility = ["//tensorflow:internal"],
     deps = [
         "//tensorflow/core/profiler/internal:profiler_interface",
+        "//tensorflow/core/profiler/lib:profiler_utils",
         "//tensorflow/core/profiler:protos_all_cc",
+        "@com_google_absl//absl/strings",
     ] + select({
         "//tensorflow:android": [],
         "//conditions:default": [
@@ -43,18 +41,13 @@ tf_cuda_library(
 )
 
 tf_cuda_library(
-    name = "profiler_graph_lib",
-    visibility = ["//tensorflow:internal"],
-    deps = tf_additional_profiler_lib_deps(),
-    alwayslink = 1,
-)
-
-tf_cuda_library(
-    name = "profiler_eager_lib",
+    name = "profiler_lib",
     visibility = ["//tensorflow:internal"],
     deps = [
-        "//tensorflow/core/profiler/internal/runtime:eager_profiler",
-    ] + tf_additional_profiler_lib_deps(),
+        "//tensorflow/core/profiler/internal/cpu:host_tracer",
+    ] + if_cuda([
+        "//tensorflow/core/profiler/internal/gpu:device_tracer",
+    ]),
     alwayslink = 1,
 )
 
@@ -67,15 +60,19 @@ tf_cuda_library(
         "//tensorflow/core:lib",
         "//tensorflow/core/profiler/internal:traceme_recorder",
         "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/types:optional",
     ],
+)
+
+cc_library(
+    name = "profiler_utils",
+    srcs = ["profiler_utils.cc"],
+    hdrs = ["profiler_utils.h"],
+    visibility = ["//tensorflow:internal"],
+    alwayslink = 1,
 )
 
 filegroup(
     name = "mobile_srcs",
-    srcs = [
-        "profiler_session.cc",
-        "profiler_session.h",
-    ],
+    srcs = glob(["*"]),
     visibility = ["//visibility:public"],
 )

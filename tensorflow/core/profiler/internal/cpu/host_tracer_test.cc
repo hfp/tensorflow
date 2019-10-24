@@ -28,7 +28,9 @@ limitations under the License.
 namespace tensorflow {
 namespace profiler {
 namespace cpu {
-std::unique_ptr<ProfilerInterface> CreateHostTracer(const ProfilerContext*);
+
+std::unique_ptr<ProfilerInterface> CreateHostTracer(
+    const ProfilerOptions& options);
 
 namespace {
 
@@ -80,7 +82,8 @@ inline ::testing::PolymorphicMatcher<NodeStatsMatcher> EqualsNodeStats(
 TEST(HostTracerTest, CollectsTraceMeEvents) {
   uint32 thread_id = Env::Default()->GetCurrentThreadId();
 
-  auto tracer = CreateHostTracer(nullptr);
+  const ProfilerOptions options;
+  auto tracer = CreateHostTracer(options);
 
   TF_ASSERT_OK(tracer->Start());
   { TraceMe traceme("hello"); }
@@ -107,30 +110,6 @@ TEST(HostTracerTest, CollectsTraceMeEvents) {
               MakeNodeStats("morning", thread_id, "key1=value1,key2=value2")),
           EqualsNodeStats(
               MakeNodeStats("incomplete", thread_id, "key1=value1,key2"))));
-}
-
-void ValidateResult(const RunMetadata& run_metadata, const string& trace_name) {
-  uint32 thread_id = Env::Default()->GetCurrentThreadId();
-
-  EXPECT_THAT(
-      run_metadata.step_stats().dev_stats(0).node_stats(),
-      ElementsAre(EqualsNodeStats(MakeNodeStats(trace_name, thread_id))));
-}
-
-TEST(HostTracerTest, CollectsTraceMeEventsBetweenTracing) {
-  auto tracer = CreateHostTracer(nullptr);
-  RunMetadata run_metadata;
-  RunMetadata run_metadata2;
-
-  TF_ASSERT_OK(tracer->Start());
-  { TraceMe traceme("hello"); }
-  TF_ASSERT_OK(CollectData(tracer.get(), &run_metadata));
-  { TraceMe traceme("world"); }
-  TF_ASSERT_OK(CollectData(tracer.get(), &run_metadata2));
-  TF_ASSERT_OK(tracer->Stop());
-
-  ValidateResult(run_metadata, "hello");
-  ValidateResult(run_metadata2, "world");
 }
 
 }  // namespace

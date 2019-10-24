@@ -21,6 +21,7 @@ limitations under the License.
 
 #include "tensorflow/lite/c/builtin_op_data.h"
 #include "tensorflow/lite/c/c_api_internal.h"
+#include "tensorflow/lite/kernels/cpu_backend_context.h"
 #include "tensorflow/lite/kernels/eigen_support.h"
 #include "tensorflow/lite/kernels/internal/optimized/optimized_ops.h"
 #include "tensorflow/lite/kernels/internal/tensor.h"
@@ -306,8 +307,9 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
 }
 
 template <KernelType kernel_type>
-void EvalFloat(const TfLiteTransposeConvParams* params, const OpData* data,
-               const TfLiteTensor* input, const TfLiteTensor* weights,
+void EvalFloat(TfLiteContext* context, const TfLiteTransposeConvParams* params,
+               const OpData* data, const TfLiteTensor* input,
+               const TfLiteTensor* weights,
                const TfLiteTensor* transposed_weights, TfLiteTensor* col2im,
                TfLiteTensor* output) {
   tflite::ConvParams op_params;
@@ -333,7 +335,8 @@ void EvalFloat(const TfLiteTransposeConvParams* params, const OpData* data,
           GetTensorShape(transposed_weights),
           GetTensorData<float>(transposed_weights), GetTensorShape(output),
           GetTensorData<float>(output), GetTensorShape(col2im),
-          GetTensorData<float>(col2im));
+          GetTensorData<float>(col2im),
+          CpuBackendContext::GetFromContext(context));
       break;
     }
   }
@@ -404,9 +407,11 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
   const int filter_width = SizeOfDimension(weights, 2);
   const int filter_height = SizeOfDimension(weights, 1);
 
+  int unused_output_height, unused_output_width;
   data->padding = ComputePaddingHeightWidth(
-      params->stride_height, params->stride_width, 1, height, width,
-      filter_height, filter_width, params->padding);
+      params->stride_height, params->stride_width, 1, 1, height, width,
+      filter_height, filter_width, params->padding, &unused_output_height,
+      &unused_output_width);
 
   // Currently support float32 and uint8.
   switch (input->type) {
@@ -417,8 +422,8 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
           ResizeAndTransposeWeights(context, weights, transposed_weights);
         }
       }
-      EvalFloat<kernel_type>(params, data, input, weights, transposed_weights,
-                             col2im, output);
+      EvalFloat<kernel_type>(context, params, data, input, weights,
+                             transposed_weights, col2im, output);
       break;
     }
     case kTfLiteUInt8: {

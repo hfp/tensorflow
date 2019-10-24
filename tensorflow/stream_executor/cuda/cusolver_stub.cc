@@ -12,7 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-#include "cuda/include/cusolverDn.h"
+#include "third_party/gpus/cuda/include/cusolverDn.h"
 #include "tensorflow/stream_executor/lib/env.h"
 #include "tensorflow/stream_executor/platform/dso_loader.h"
 
@@ -50,4 +50,8 @@ cusolverStatus_t GetSymbolNotFoundError() {
 }
 }  // namespace
 
+#if CUDA_VERSION < 10010
 #include "tensorflow/stream_executor/cuda/cusolver_dense_10_0.inc"
+#else
+#include "tensorflow/stream_executor/cuda/cusolver_dense_10_1.inc"
+#endif

@@ -22,7 +22,7 @@ limitations under the License.
 
 #include "grpcpp/grpcpp.h"
 #include "grpcpp/security/credentials.h"
-
+#include "tensorflow/core/common_runtime/eager/context.h"
 #include "tensorflow/core/common_runtime/process_util.h"
 #include "tensorflow/core/common_runtime/stats_publisher_interface.h"
 #include "tensorflow/core/distributed_runtime/master_env.h"
@@ -95,10 +95,15 @@ class GrpcServer : public ServerInterface {
   WorkerEnv* worker_env() { return &worker_env_; }
   MasterEnv* master_env() { return &master_env_; }
 
-  std::shared_ptr<GrpcChannelCache> channel_cache() { return channel_cache_; }
+  // Add master eager context to local eager service in order to handle enqueue
+  // requests from remote workers.
+  Status AddMasterEagerContextToEagerService(
+      const tensorflow::uint64 context_id, tensorflow::EagerContext* context);
+  // Update the set of workers that can be reached by the GRPC server
+  Status UpdateServerDef(const ServerDef& server_def);
 
  protected:
-  virtual Status GetPort(int* port) const;
+  virtual Status GetPort(const ServerDef& server_def, int* port) const;
   Status Init(const GrpcServerOptions& opts = GrpcServerOptions());
 
   // A subclass can override this method to support secure credentials.
@@ -124,19 +129,14 @@ class GrpcServer : public ServerInterface {
   const ServerDef& server_def() const { return server_def_; }
   GrpcWorker* worker_impl() const { return worker_impl_.get(); }
 
-  void set_channel_cache(GrpcChannelCache* channel_cache) {
-    channel_cache_.reset(channel_cache);
-  }
 
  private:
-  // The overall server configuration.
-  const ServerDef server_def_;
   Env* env_;
 
   // The port to which this server is bound.
   int bound_port_ = 0;
 
-  // Guards state transitions.
+  // Guards server configuration, server, and state.
   mutex mu_;
 
   // Represents the current state of the server, which changes as follows:
@@ -156,7 +156,6 @@ class GrpcServer : public ServerInterface {
   std::unique_ptr<Master> master_impl_;
   AsyncServiceInterface* master_service_ = nullptr;
   std::unique_ptr<Thread> master_thread_ GUARDED_BY(mu_);
-  std::shared_ptr<GrpcChannelCache> channel_cache_;
 
   // Implementation of a TensorFlow worker, and RPC polling thread.
   WorkerEnv worker_env_;
@@ -168,6 +167,9 @@ class GrpcServer : public ServerInterface {
   AsyncServiceInterface* eager_service_ = nullptr;
   std::unique_ptr<Thread> eager_thread_ GUARDED_BY(mu_);
   std::shared_ptr<WorkerSession> worker_session_;
+
+  // The overall server configuration.
+  ServerDef server_def_ GUARDED_BY(mu_);
 
   std::unique_ptr<::grpc::Server> server_ GUARDED_BY(mu_);
 };
