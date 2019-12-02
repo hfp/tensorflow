@@ -44,6 +44,7 @@ tf_py_test(
         ":impl",
         "//third_party/py/numpy",
         "//tensorflow/python:client_testlib",
+        "//tensorflow/python/autograph/core:test_lib",
         "//tensorflow/python/autograph/utils",
     ],
 )
@@ -53,12 +54,16 @@ py_test(
     srcs = ["api_py3_test.py"],
     python_version = "PY3",
     srcs_version = "PY3",
-    tags = ["no_oss_py2"],
+    tags = [
+        "no_oss_py2",
+        "no_pip",
+        "nopip",
+    ],
     deps = [
         ":impl",
         "//tensorflow/python:client_testlib",
-        "//tensorflow/python/autograph/utils",
-        "//third_party/py/numpy",
+        "//tensorflow/python:constant_op",
+        "//tensorflow/python/autograph/core",
     ],
 )
 

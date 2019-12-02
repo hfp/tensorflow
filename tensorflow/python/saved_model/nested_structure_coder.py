@@ -44,9 +44,11 @@ from tensorflow.python.framework import indexed_slices
 from tensorflow.python.framework import sparse_tensor
 from tensorflow.python.framework import tensor_shape
 from tensorflow.python.framework import tensor_spec
+from tensorflow.python.ops import resource_variable_ops
 from tensorflow.python.ops import tensor_array_ops
 from tensorflow.python.ops.ragged import ragged_tensor
 from tensorflow.python.util import compat
+from tensorflow.python.util.compat import collections_abc
 
 
 class NotEncodableError(Exception):
@@ -161,7 +163,7 @@ def _is_named_tuple(instance):
   if not isinstance(instance, tuple):
     return False
   return (hasattr(instance, "_fields") and
-          isinstance(instance._fields, collections.Sequence) and
+          isinstance(instance._fields, collections_abc.Sequence) and
           all(isinstance(f, six.string_types) for f in instance._fields))
 
 
@@ -215,7 +217,7 @@ class _NamedTupleCodec(object):
   """Codec for namedtuples.
 
   Encoding and decoding a namedtuple reconstructs a namedtuple with a different
-  actual Python type, but with same `typename` and `fields`.
+  actual Python type, but with the same `typename` and `fields`.
   """
 
   def can_encode(self, pyobj):
@@ -466,6 +468,8 @@ class _TypeSpecCodec(object):
           optional_ops.OptionalSpec,
       struct_pb2.TypeSpecProto.PER_REPLICA_SPEC:
           values.PerReplicaSpec,
+      struct_pb2.TypeSpecProto.VARIABLE_SPEC:
+          resource_variable_ops.VariableSpec,
   }
 
   # Mapping from type (TypeSpec subclass) to enum value.
@@ -483,18 +487,24 @@ class _TypeSpecCodec(object):
     encoded_type_spec = struct_pb2.StructuredValue()
     encoded_type_spec.type_spec_value.CopyFrom(
         struct_pb2.TypeSpecProto(
-            type_spec_class=type_spec_class, type_state=encode_fn(type_state)))
+            type_spec_class=type_spec_class,
+            type_state=encode_fn(type_state),
+            type_spec_class_name=type(type_spec_value).__name__))
     return encoded_type_spec
 
   def can_decode(self, value):
-    return (
-        value.HasField("type_spec_value") and
-        value.type_spec_value.type_spec_class in self.TYPE_SPEC_CLASS_FROM_PROTO
-    )
+    return value.HasField("type_spec_value")
 
   def do_decode(self, value, decode_fn):
+    """Returns the `tf.TypeSpec` encoded by the proto `value`."""
     type_spec_proto = value.type_spec_value
     type_spec_class_enum = type_spec_proto.type_spec_class
+    if type_spec_class_enum not in self.TYPE_SPEC_CLASS_FROM_PROTO:
+      raise ValueError(
+          "The type '%s' is not supported by this version of TensorFlow. "
+          "(The object you are loading must have been created with a newer "
+          "version of TensorFlow.)" % type_spec_proto.type_spec_class_name)
+
     type_spec_class = self.TYPE_SPEC_CLASS_FROM_PROTO[type_spec_class_enum]
     # pylint: disable=protected-access
     return type_spec_class._deserialize(decode_fn(type_spec_proto.type_state))

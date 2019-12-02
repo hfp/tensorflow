@@ -52,6 +52,7 @@ class ToDense(Layer):
   def __init__(self, default_value, **kwargs):
     super(ToDense, self).__init__(**kwargs)
     self._default_value = default_value
+    self._supports_ragged_inputs = True
 
   def call(self, inputs):
     if isinstance(inputs, ragged_tensor.RaggedTensor):
@@ -75,6 +76,7 @@ class ToRagged(Layer):
     super(ToRagged, self).__init__(**kwargs)
     self._padding = padding
     self._ragged_rank = ragged_rank
+    self._supports_ragged_inputs = True
 
   def call(self, inputs):
     return ragged_tensor.RaggedTensor.from_tensor(
@@ -158,10 +160,13 @@ def get_test_mode_kwargs():
   # Certain things weren't supported correctly in the old path, therefore
   # with these changes, some tests now only pass in the single code path in V2.
   if run_eagerly or context.executing_eagerly():
-    run_distributed = True
+    experimental_run_tf_function = True
   else:
-    run_distributed = testing_utils.should_run_distributed()
-  return {"run_eagerly": run_eagerly, "run_distributed": run_distributed}
+    experimental_run_tf_function = testing_utils.should_run_tf_function()
+  return {
+      "run_eagerly": run_eagerly,
+      "experimental_run_tf_function": experimental_run_tf_function
+  }
 
 
 @keras_parameterized.run_with_all_model_types
@@ -220,7 +225,7 @@ class CompositeTensorOutputTest(keras_parameterized.TestCase):
     # converts the ragged tensor back to a dense tensor.
     layers = [ToRagged(padding=0)]
     model = testing_utils.get_model_from_layers(layers, input_shape=(None,))
-    model._run_distributed = testing_utils.should_run_distributed()
+    model._experimental_run_tf_function = testing_utils.should_run_tf_function()
     model._run_eagerly = testing_utils.should_run_eagerly()
 
     # Define some input data with additional padding.
@@ -235,7 +240,7 @@ class CompositeTensorOutputTest(keras_parameterized.TestCase):
     # converts the ragged tensor back to a dense tensor.
     layers = [ToRagged(padding=0)]
     model = testing_utils.get_model_from_layers(layers, input_shape=(None,))
-    model._run_distributed = testing_utils.should_run_distributed()
+    model._experimental_run_tf_function = testing_utils.should_run_tf_function()
     model._run_eagerly = testing_utils.should_run_eagerly()
 
     # Define some input data with additional padding.
@@ -250,7 +255,7 @@ class CompositeTensorOutputTest(keras_parameterized.TestCase):
     # converts the ragged tensor back to a dense tensor.
     layers = [ToSparse()]
     model = testing_utils.get_model_from_layers(layers, input_shape=(None,))
-    model._run_distributed = testing_utils.should_run_distributed()
+    model._experimental_run_tf_function = testing_utils.should_run_tf_function()
     model._run_eagerly = testing_utils.should_run_eagerly()
 
     # Define some input data with additional padding.
@@ -270,7 +275,7 @@ class CompositeTensorOutputTest(keras_parameterized.TestCase):
     # converts the ragged tensor back to a dense tensor.
     layers = [ToSparse()]
     model = testing_utils.get_model_from_layers(layers, input_shape=(None,))
-    model._run_distributed = testing_utils.should_run_distributed()
+    model._experimental_run_tf_function = testing_utils.should_run_tf_function()
     model._run_eagerly = testing_utils.should_run_eagerly()
 
     # Define some input data with additional padding.
@@ -407,7 +412,7 @@ class ScipySparseTensorInputTest(keras_parameterized.TestCase,
         optimizer="sgd",
         loss="mse",
         metrics=["accuracy"],
-        run_distributed=testing_utils.should_run_distributed())
+        experimental_run_tf_function=testing_utils.should_run_tf_function())
 
     input_data = scipy.sparse.coo_matrix(([1, 2, 3], ([0, 1, 1], [0, 0, 1])),
                                          shape=[2, 3])
@@ -469,7 +474,7 @@ class ScipySparseTensorInputTest(keras_parameterized.TestCase,
         optimizer="sgd",
         loss="mse",
         metrics=["accuracy"],
-        run_distributed=testing_utils.should_run_distributed())
+        experimental_run_tf_function=testing_utils.should_run_tf_function())
 
     input_data = {
         input_name:
@@ -507,7 +512,10 @@ class RaggedTensorInputTest(keras_parameterized.TestCase,
     # Prepare the model to test.
     input_name = get_input_name(use_dict)
     model_input = input_layer.Input(
-        shape=(None, None), ragged=True, name=input_name, dtype=dtypes.int32)
+        shape=(None, None), ragged=True, name=input_name, dtype=dtypes.int32,
+        batch_size=2)
+    self.assertIsInstance(model_input, ragged_tensor.RaggedTensor)
+    self.assertEqual(model_input.shape.as_list(), [2, None, None])
     layers = [ToDense(default_value=-1)]
     model = get_model_from_layers_with_input(layers, model_input=model_input)
     model.compile(

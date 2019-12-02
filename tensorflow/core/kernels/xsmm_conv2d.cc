@@ -28,7 +28,7 @@ void dummy_xsmm_conv2d_ensure_file_is_not_empty();
 #include <stdlib.h>
 #include <cstring>
 #if defined(_OPENMP) && defined(LIBXSMM_USE_OPENMP)
-# include <omp.h>
+#include <omp.h>
 #endif
 
 #include "tensorflow/core/framework/op_kernel.h"
@@ -39,10 +39,11 @@ void dummy_xsmm_conv2d_ensure_file_is_not_empty();
 #include "include/libxsmm_malloc.h"
 #include "src/libxsmm_main.h"  // TODO(bsteiner): API to avoid incl. header from src/
 
-#define CHECK_LIBXSMM(CONDITION_OK, MESSAGE) if (!(CONDITION_OK)) VLOG(0) << (MESSAGE)
-#define CHECK_LIBXSMM_DNN(STATUS, MESSAGE) CHECK_LIBXSMM(LIBXSMM_DNN_SUCCESS == (STATUS), MESSAGE) \
-  << " failed: " << libxsmm_dnn_get_error(STATUS);
-
+#define CHECK_LIBXSMM(CONDITION_OK, MESSAGE) \
+  if (!(CONDITION_OK)) VLOG(0) << (MESSAGE)
+#define CHECK_LIBXSMM_DNN(STATUS, MESSAGE)                \
+  CHECK_LIBXSMM(LIBXSMM_DNN_SUCCESS == (STATUS), MESSAGE) \
+      << " failed: " << libxsmm_dnn_get_error(STATUS);
 
 namespace tensorflow {
 
@@ -118,7 +119,8 @@ LIBXSMM_INLINE void copy_RSCK_to_custom(const float* rsck, float* kcrs, int R,
 
 struct libxsmm_dnn_registry_key {
   const libxsmm_dnn_conv_desc descriptor;
-  libxsmm_dnn_registry_key(const libxsmm_dnn_conv_desc& desc_): descriptor(desc_) {}
+  libxsmm_dnn_registry_key(const libxsmm_dnn_conv_desc& desc_)
+      : descriptor(desc_) {}
   bool operator==(const libxsmm_dnn_registry_key& regkey) const {
     return 0 == memcmp(&descriptor, &regkey.descriptor, sizeof(descriptor));
   }
@@ -126,7 +128,8 @@ struct libxsmm_dnn_registry_key {
 
 struct HashFunction {
   std::size_t operator()(const libxsmm_dnn_registry_key& regkey) const {
-    return libxsmm_hash(&regkey.descriptor, sizeof(regkey.descriptor), 25071975);
+    return libxsmm_hash(&regkey.descriptor, sizeof(regkey.descriptor),
+                        25071975);
   }
 };
 
@@ -137,24 +140,25 @@ struct libxsmm_dnn_registry_value {
   libxsmm_dnn_layer* handle;
 };
 
-typedef libxsmm_tf_allocator<libxsmm_scratch_allocator> libxsmm_tf_scratch_allocator;
+typedef libxsmm_tf_allocator<libxsmm_scratch_allocator>
+    libxsmm_tf_scratch_allocator;
 
 static class libxsmm_dnn_registry_type {
-private:
-  typedef std::unordered_map<
-    libxsmm_dnn_registry_key,
-    libxsmm_dnn_registry_value,
-    HashFunction>
-  container_type;
+ private:
+  typedef std::unordered_map<libxsmm_dnn_registry_key,
+                             libxsmm_dnn_registry_value, HashFunction>
+      container_type;
 
-public:
+ public:
   libxsmm_dnn_registry_type() {
     libxsmm_init(); /* must be first */
 #if !defined(LIBXSMM_LOCAL_ALLOC)
-    { libxsmm_malloc_function malloc_fn; libxsmm_free_function free_fn;
+    {
+      libxsmm_malloc_function malloc_fn;
+      libxsmm_free_function free_fn;
       malloc_fn.function = libxsmm_tf_scratch_allocator::malloc;
       free_fn.function = libxsmm_tf_scratch_allocator::free;
-      libxsmm_set_scratch_allocator(0/*context*/, malloc_fn, free_fn);
+      libxsmm_set_scratch_allocator(0 /*context*/, malloc_fn, free_fn);
     }
 #endif
     LIBXSMM_LOCK_ATTR_INIT(LIBXSMM_LOCK_RWLOCK, &attr);
@@ -165,17 +169,16 @@ public:
     const container_type::const_iterator end = container.end();
     for (container_type::const_iterator i = container.begin(); i != end; ++i) {
       CHECK_LIBXSMM_DNN(
-        libxsmm_dnn_destroy_tensor_datalayout(i->second.layout_input),
-        "destroy input layout");
+          libxsmm_dnn_destroy_tensor_datalayout(i->second.layout_input),
+          "destroy input layout");
       CHECK_LIBXSMM_DNN(
-        libxsmm_dnn_destroy_tensor_datalayout(i->second.layout_output),
-        "destroy output layout");
+          libxsmm_dnn_destroy_tensor_datalayout(i->second.layout_output),
+          "destroy output layout");
       CHECK_LIBXSMM_DNN(
-        libxsmm_dnn_destroy_tensor_datalayout(i->second.layout_filter),
-        "destroy filter layout");
-      CHECK_LIBXSMM_DNN(
-        libxsmm_dnn_destroy_conv_layer(i->second.handle),
-        "destroy handle");
+          libxsmm_dnn_destroy_tensor_datalayout(i->second.layout_filter),
+          "destroy filter layout");
+      CHECK_LIBXSMM_DNN(libxsmm_dnn_destroy_conv_layer(i->second.handle),
+                        "destroy handle");
     }
     LIBXSMM_LOCK_RELEASE(LIBXSMM_LOCK_RWLOCK, &lock);
     LIBXSMM_LOCK_DESTROY(LIBXSMM_LOCK_RWLOCK, &lock);
@@ -192,25 +195,25 @@ public:
       libxsmm_dnn_registry_value regentry;
 
       LIBXSMM_LOCK_ACQUIRE(LIBXSMM_LOCK_RWLOCK, &lock);
-      i = container.find(regkey); 
-      if (i == container.end()) { // re-check after lock acquisition
-        regentry.handle = libxsmm_dnn_create_conv_layer(regkey.descriptor, &status);
+      i = container.find(regkey);
+      if (i == container.end()) {  // re-check after lock acquisition
+        regentry.handle =
+            libxsmm_dnn_create_conv_layer(regkey.descriptor, &status);
         if (LIBXSMM_DNN_WARN_FALLBACK != status) {
           CHECK_LIBXSMM_DNN(status, "create handle");
-        }
-        else { // warning
+        } else {  // warning
           VLOG(1) << libxsmm_dnn_get_error(status);
         }
         regentry.layout_input = libxsmm_dnn_create_tensor_datalayout(
-          regentry.handle, LIBXSMM_DNN_INPUT, &status);
+            regentry.handle, LIBXSMM_DNN_INPUT, &status);
         CHECK_LIBXSMM_DNN(status, "create input layout");
 
         regentry.layout_output = libxsmm_dnn_create_tensor_datalayout(
-          regentry.handle, LIBXSMM_DNN_OUTPUT, &status);
+            regentry.handle, LIBXSMM_DNN_OUTPUT, &status);
         CHECK_LIBXSMM_DNN(status, "create output layout");
 
         regentry.layout_filter = libxsmm_dnn_create_tensor_datalayout(
-          regentry.handle, LIBXSMM_DNN_FILTER, &status);
+            regentry.handle, LIBXSMM_DNN_FILTER, &status);
         CHECK_LIBXSMM_DNN(status, "create filter layout");
 
         i = container.insert(std::make_pair(regkey, regentry)).first;
@@ -220,7 +223,7 @@ public:
     return i->second;
   }
 
-private:
+ private:
   container_type container;
   LIBXSMM_LOCK_ATTR_TYPE(LIBXSMM_LOCK_RWLOCK) attr;
   LIBXSMM_LOCK_TYPE(LIBXSMM_LOCK_RWLOCK) lock;
@@ -269,15 +272,18 @@ static bool CallLibxsmmConvGeneric(OpKernelContext* ctx,
   const int ifmblock = regentry.handle->ifmblock;
   const int ofmblock = regentry.handle->ofmblock;
 
-  const int blocksifm = (desc.C % ifmblock == 0 ? desc.C / ifmblock : desc.C / ifmblock + 1);
-  const int blocksofm = (desc.K % ofmblock == 0 ? desc.K / ofmblock : desc.K / ofmblock + 1);
+  const int blocksifm =
+      (desc.C % ifmblock == 0 ? desc.C / ifmblock : desc.C / ifmblock + 1);
+  const int blocksofm =
+      (desc.K % ofmblock == 0 ? desc.K / ofmblock : desc.K / ofmblock + 1);
 
-  const size_t filter_size = blocksofm * blocksifm * desc.R * desc.S * ifmblock * ofmblock;
-  float *const native_filter = (float*)libxsmm_aligned_scratch(
-    filter_size * sizeof(float), 2097152/*alignment*/);
+  const size_t filter_size =
+      blocksofm * blocksifm * desc.R * desc.S * ifmblock * ofmblock;
+  float* const native_filter = (float*)libxsmm_aligned_scratch(
+      filter_size * sizeof(float), 2097152 /*alignment*/);
 
-  const DeviceBase::CpuWorkerThreads *const worker_threads =
-    ctx->device()->tensorflow_cpu_worker_threads();
+  const DeviceBase::CpuWorkerThreads* const worker_threads =
+      ctx->device()->tensorflow_cpu_worker_threads();
   const int num_threads = worker_threads->num_threads;
 
 #if 1
@@ -290,8 +296,8 @@ static bool CallLibxsmmConvGeneric(OpKernelContext* ctx,
         worker_threads->workers->Schedule([=, &count]() {
           const int start = work / num_threads * i;
           const int end = (start + work / num_threads) > work
-                        ? work
-                        : start + work / num_threads;
+                              ? work
+                              : start + work / num_threads;
           copy_RSCK_to_custom(filter, native_filter, desc.R, desc.S, desc.C,
                               desc.K, blocksifm, blocksofm, ifmblock, ofmblock,
                               start, end);
@@ -317,8 +323,10 @@ static bool CallLibxsmmConvGeneric(OpKernelContext* ctx,
       count.Wait();
     }
   } else if (kind == LIBXSMM_DNN_COMPUTE_KIND_UPD) {
-    // weight update buffer must be in the right format (LIBXSMM_DNN_TENSOR_FORMAT_RSCK_PTR)
-    libxsmm_filter = libxsmm_dnn_link_tensor(regentry.layout_filter, filter, &status);
+    // weight update buffer must be in the right format
+    // (LIBXSMM_DNN_TENSOR_FORMAT_RSCK_PTR)
+    libxsmm_filter =
+        libxsmm_dnn_link_tensor(regentry.layout_filter, filter, &status);
     CHECK_LIBXSMM_DNN(status, "link filter with layout");
   }
 #else
@@ -330,69 +338,75 @@ static bool CallLibxsmmConvGeneric(OpKernelContext* ctx,
 #endif
 
   // LIBXSMM_DNN_TENSOR_FORMAT_NHWC_PTR
-  libxsmm_input = libxsmm_dnn_link_tensor(regentry.layout_input, input, &status);
+  libxsmm_input =
+      libxsmm_dnn_link_tensor(regentry.layout_input, input, &status);
   CHECK_LIBXSMM_DNN(status, "link input buffer with layout");
 
   // LIBXSMM_DNN_TENSOR_FORMAT_NHWC_PTR
-  libxsmm_output = libxsmm_dnn_link_tensor(regentry.layout_output, output, &status);
+  libxsmm_output =
+      libxsmm_dnn_link_tensor(regentry.layout_output, output, &status);
   CHECK_LIBXSMM_DNN(status, "link output buffer with layout");
 
   if (kind == LIBXSMM_DNN_COMPUTE_KIND_FWD ||
       kind == LIBXSMM_DNN_COMPUTE_KIND_BWD) {
     // LIBXSMM_DNN_TENSOR_FORMAT_LIBXSMM_PTR
-    libxsmm_filter = libxsmm_dnn_link_tensor(regentry.layout_filter, native_filter, &status);
+    libxsmm_filter =
+        libxsmm_dnn_link_tensor(regentry.layout_filter, native_filter, &status);
     CHECK_LIBXSMM_DNN(status, "link filter with layout");
-    CHECK_LIBXSMM_DNN(
-      libxsmm_dnn_bind_tensor(regentry.handle, libxsmm_filter, LIBXSMM_DNN_REGULAR_FILTER),
-      "bind filter to handle");
+    CHECK_LIBXSMM_DNN(libxsmm_dnn_bind_tensor(regentry.handle, libxsmm_filter,
+                                              LIBXSMM_DNN_REGULAR_FILTER),
+                      "bind filter to handle");
   }
   if (kind == LIBXSMM_DNN_COMPUTE_KIND_FWD) {
-    CHECK_LIBXSMM_DNN(
-      libxsmm_dnn_bind_tensor(regentry.handle, libxsmm_input, LIBXSMM_DNN_REGULAR_INPUT),
-      "bind input forward");
-    CHECK_LIBXSMM_DNN(
-      libxsmm_dnn_bind_tensor(regentry.handle, libxsmm_filter, LIBXSMM_DNN_REGULAR_FILTER),
-      "bind filter forward");
-    CHECK_LIBXSMM_DNN(
-      libxsmm_dnn_bind_tensor(regentry.handle, libxsmm_output, LIBXSMM_DNN_REGULAR_OUTPUT),
-      "bind output forward");
+    CHECK_LIBXSMM_DNN(libxsmm_dnn_bind_tensor(regentry.handle, libxsmm_input,
+                                              LIBXSMM_DNN_REGULAR_INPUT),
+                      "bind input forward");
+    CHECK_LIBXSMM_DNN(libxsmm_dnn_bind_tensor(regentry.handle, libxsmm_filter,
+                                              LIBXSMM_DNN_REGULAR_FILTER),
+                      "bind filter forward");
+    CHECK_LIBXSMM_DNN(libxsmm_dnn_bind_tensor(regentry.handle, libxsmm_output,
+                                              LIBXSMM_DNN_REGULAR_OUTPUT),
+                      "bind output forward");
   } else if (kind == LIBXSMM_DNN_COMPUTE_KIND_BWD) {
     CHECK_LIBXSMM_DNN(libxsmm_dnn_zero_tensor(libxsmm_input), "zeroing input");
-    CHECK_LIBXSMM_DNN(
-      libxsmm_dnn_bind_tensor(regentry.handle, libxsmm_input, LIBXSMM_DNN_GRADIENT_INPUT),
-      "bind input backward");
-    CHECK_LIBXSMM_DNN(
-      libxsmm_dnn_bind_tensor(regentry.handle, libxsmm_filter, LIBXSMM_DNN_REGULAR_FILTER),
-      "bind filter backward");
-    CHECK_LIBXSMM_DNN(
-      libxsmm_dnn_bind_tensor(regentry.handle, libxsmm_output, LIBXSMM_DNN_GRADIENT_OUTPUT),
-      "bind output backward");
+    CHECK_LIBXSMM_DNN(libxsmm_dnn_bind_tensor(regentry.handle, libxsmm_input,
+                                              LIBXSMM_DNN_GRADIENT_INPUT),
+                      "bind input backward");
+    CHECK_LIBXSMM_DNN(libxsmm_dnn_bind_tensor(regentry.handle, libxsmm_filter,
+                                              LIBXSMM_DNN_REGULAR_FILTER),
+                      "bind filter backward");
+    CHECK_LIBXSMM_DNN(libxsmm_dnn_bind_tensor(regentry.handle, libxsmm_output,
+                                              LIBXSMM_DNN_GRADIENT_OUTPUT),
+                      "bind output backward");
   } else if (kind == LIBXSMM_DNN_COMPUTE_KIND_UPD) {
-    CHECK_LIBXSMM_DNN(libxsmm_dnn_zero_tensor(libxsmm_filter), "zeroing filter");
-    CHECK_LIBXSMM_DNN(
-      libxsmm_dnn_bind_tensor(regentry.handle, libxsmm_input, LIBXSMM_DNN_REGULAR_INPUT),
-      "bind input weight update");
-    CHECK_LIBXSMM_DNN(
-      libxsmm_dnn_bind_tensor(regentry.handle, libxsmm_filter, LIBXSMM_DNN_GRADIENT_FILTER),
-      "bind filter weight update");
-    CHECK_LIBXSMM_DNN(
-      libxsmm_dnn_bind_tensor(regentry.handle, libxsmm_output, LIBXSMM_DNN_GRADIENT_OUTPUT),
-      "bind output weight update");
+    CHECK_LIBXSMM_DNN(libxsmm_dnn_zero_tensor(libxsmm_filter),
+                      "zeroing filter");
+    CHECK_LIBXSMM_DNN(libxsmm_dnn_bind_tensor(regentry.handle, libxsmm_input,
+                                              LIBXSMM_DNN_REGULAR_INPUT),
+                      "bind input weight update");
+    CHECK_LIBXSMM_DNN(libxsmm_dnn_bind_tensor(regentry.handle, libxsmm_filter,
+                                              LIBXSMM_DNN_GRADIENT_FILTER),
+                      "bind filter weight update");
+    CHECK_LIBXSMM_DNN(libxsmm_dnn_bind_tensor(regentry.handle, libxsmm_output,
+                                              LIBXSMM_DNN_GRADIENT_OUTPUT),
+                      "bind output weight update");
   } else {
-    assert(0/*should not happen*/);
+    assert(0 /*should not happen*/);
   }
 
 #if defined(LIBXSMM_DETAILED_TIMING)
   l_tick4 = libxsmm_timer_tick();
 #endif
 
-  const size_t scratch_size = libxsmm_dnn_get_scratch_size(regentry.handle, LIBXSMM_DNN_COMPUTE_KIND_ALL, &status);
+  const size_t scratch_size = libxsmm_dnn_get_scratch_size(
+      regentry.handle, LIBXSMM_DNN_COMPUTE_KIND_ALL, &status);
   CHECK_LIBXSMM_DNN(status, "get scratch size");
-  void *const scratch = libxsmm_aligned_scratch(scratch_size, 2097152/*alignment*/);
+  void* const scratch =
+      libxsmm_aligned_scratch(scratch_size, 2097152 /*alignment*/);
   CHECK_LIBXSMM(0 != scratch, "scratch memory allocation");
-  CHECK_LIBXSMM_DNN(
-    libxsmm_dnn_bind_scratch(regentry.handle, LIBXSMM_DNN_COMPUTE_KIND_ALL, scratch),
-    "binding scratch");
+  CHECK_LIBXSMM_DNN(libxsmm_dnn_bind_scratch(
+                        regentry.handle, LIBXSMM_DNN_COMPUTE_KIND_ALL, scratch),
+                    "binding scratch");
 
 #if defined(LIBXSMM_DETAILED_TIMING)
   l_tick5 = libxsmm_timer_tick();
@@ -411,19 +425,18 @@ static bool CallLibxsmmConvGeneric(OpKernelContext* ctx,
 
   for (int i = 0; i < num_threads; ++i) {
     worker_threads->workers->Schedule([=, &counter]() {
-      CHECK_LIBXSMM_DNN(
-        libxsmm_dnn_execute_st(regentry.handle, kind, 0, i),
-        "worker");
+      CHECK_LIBXSMM_DNN(libxsmm_dnn_execute_st(regentry.handle, kind, 0, i),
+                        "worker");
       counter.DecrementCount();
     });
   }
   counter.Wait();
 #else
-# pragma omp parallel
+#pragma omp parallel
   {
     CHECK_LIBXSMM_DNN(
-      libxsmm_dnn_execute_st(regentry.handle, kind, 0, omp_get_thread_num()),
-      "worker");
+        libxsmm_dnn_execute_st(regentry.handle, kind, 0, omp_get_thread_num()),
+        "worker");
   }
 #endif
 
@@ -440,45 +453,47 @@ static bool CallLibxsmmConvGeneric(OpKernelContext* ctx,
 #endif
 
   /* clean up */
-  CHECK_LIBXSMM_DNN(
-      libxsmm_dnn_release_scratch(regentry.handle, LIBXSMM_DNN_COMPUTE_KIND_ALL),
-      "release scratch");
+  CHECK_LIBXSMM_DNN(libxsmm_dnn_release_scratch(regentry.handle,
+                                                LIBXSMM_DNN_COMPUTE_KIND_ALL),
+                    "release scratch");
   if (kind == LIBXSMM_DNN_COMPUTE_KIND_FWD) {
     CHECK_LIBXSMM_DNN(
-      libxsmm_dnn_release_tensor(regentry.handle, LIBXSMM_DNN_REGULAR_INPUT),
-      "release input");
+        libxsmm_dnn_release_tensor(regentry.handle, LIBXSMM_DNN_REGULAR_INPUT),
+        "release input");
     CHECK_LIBXSMM_DNN(
-      libxsmm_dnn_release_tensor(regentry.handle, LIBXSMM_DNN_REGULAR_OUTPUT),
-      "release output");
+        libxsmm_dnn_release_tensor(regentry.handle, LIBXSMM_DNN_REGULAR_OUTPUT),
+        "release output");
     CHECK_LIBXSMM_DNN(
-      libxsmm_dnn_release_tensor(regentry.handle, LIBXSMM_DNN_REGULAR_FILTER),
-      "release filter");
+        libxsmm_dnn_release_tensor(regentry.handle, LIBXSMM_DNN_REGULAR_FILTER),
+        "release filter");
   } else if (kind == LIBXSMM_DNN_COMPUTE_KIND_BWD) {
     CHECK_LIBXSMM_DNN(
-      libxsmm_dnn_release_tensor(regentry.handle, LIBXSMM_DNN_GRADIENT_INPUT),
-      "release input");
+        libxsmm_dnn_release_tensor(regentry.handle, LIBXSMM_DNN_GRADIENT_INPUT),
+        "release input");
+    CHECK_LIBXSMM_DNN(libxsmm_dnn_release_tensor(regentry.handle,
+                                                 LIBXSMM_DNN_GRADIENT_OUTPUT),
+                      "release output");
     CHECK_LIBXSMM_DNN(
-      libxsmm_dnn_release_tensor(regentry.handle, LIBXSMM_DNN_GRADIENT_OUTPUT),
-      "release output");
-    CHECK_LIBXSMM_DNN(
-      libxsmm_dnn_release_tensor(regentry.handle, LIBXSMM_DNN_REGULAR_FILTER),
-      "release filter");
+        libxsmm_dnn_release_tensor(regentry.handle, LIBXSMM_DNN_REGULAR_FILTER),
+        "release filter");
   } else if (kind == LIBXSMM_DNN_COMPUTE_KIND_UPD) {
     CHECK_LIBXSMM_DNN(
-      libxsmm_dnn_release_tensor(regentry.handle, LIBXSMM_DNN_REGULAR_INPUT),
-      "release input");
-    CHECK_LIBXSMM_DNN(
-      libxsmm_dnn_release_tensor(regentry.handle, LIBXSMM_DNN_GRADIENT_OUTPUT),
-      "release output");
-    CHECK_LIBXSMM_DNN(
-      libxsmm_dnn_release_tensor(regentry.handle, LIBXSMM_DNN_GRADIENT_FILTER),
-      "release filter");
+        libxsmm_dnn_release_tensor(regentry.handle, LIBXSMM_DNN_REGULAR_INPUT),
+        "release input");
+    CHECK_LIBXSMM_DNN(libxsmm_dnn_release_tensor(regentry.handle,
+                                                 LIBXSMM_DNN_GRADIENT_OUTPUT),
+                      "release output");
+    CHECK_LIBXSMM_DNN(libxsmm_dnn_release_tensor(regentry.handle,
+                                                 LIBXSMM_DNN_GRADIENT_FILTER),
+                      "release filter");
   } else {
     /* shouldn't happen */
   }
   CHECK_LIBXSMM_DNN(libxsmm_dnn_destroy_tensor(libxsmm_input), "destroy input");
-  CHECK_LIBXSMM_DNN(libxsmm_dnn_destroy_tensor(libxsmm_output), "destroy output");
-  CHECK_LIBXSMM_DNN(libxsmm_dnn_destroy_tensor(libxsmm_filter), "destroy filter");
+  CHECK_LIBXSMM_DNN(libxsmm_dnn_destroy_tensor(libxsmm_output),
+                    "destroy output");
+  CHECK_LIBXSMM_DNN(libxsmm_dnn_destroy_tensor(libxsmm_filter),
+                    "destroy filter");
 
 #if defined(LIBXSMM_DETAILED_TIMING)
   l_tick9 = libxsmm_timer_tick();

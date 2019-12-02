@@ -91,9 +91,10 @@ def model_iteration(model,
         declaring one epoch finished and starting the next epoch. Ignored with
         the default value of `None`.
       validation_steps: Number of steps to run validation for (only if doing
-        validation from data tensors). Ignored with the default value of `None`.
+        validation from data tensors). Ignored with the default value of
+        `None`.
       validation_freq: Only relevant if validation data is provided. Integer or
-        `collections.Container` instance (e.g. list, tuple, etc.). If an
+        `collections_abc.Container` instance (e.g. list, tuple, etc.). If an
         integer, specifies how many training epochs to run before a new
         validation run is performed, e.g. `validation_freq=2` runs
         validation every 2 epochs. If a Container, specifies the epochs on
@@ -101,8 +102,8 @@ def model_iteration(model,
         validation at the end of the 1st, 2nd, and 10th epochs.
       mode: One of ModeKeys.TRAIN/ModeKeys.TEST/ModeKeys.PREDICT.
       validation_in_fit: if true, then this method is invoked from within
-        training iteration (for validation). In the case where `val_inputs` is a
-        dataset, this flag indicates that its iterator and feed values are
+        training iteration (for validation). In the case where `val_inputs` is
+        a dataset, this flag indicates that its iterator and feed values are
         already created so should properly reuse resources.
       prepared_feed_values_from_dataset: if True, `inputs` is a list of feed
         tensors returned from `_prepare_feed_values` call on the validation
@@ -139,7 +140,7 @@ def model_iteration(model,
     if steps_per_epoch is None:
       reset_dataset_after_each_epoch = True
       steps_per_epoch = training_utils.infer_steps_for_dataset(
-          inputs, steps_per_epoch, epochs=epochs, steps_name=steps_name)
+          model, inputs, steps_per_epoch, epochs=epochs, steps_name=steps_name)
     input_iterator = _get_iterator(inputs, model._distribution_strategy)
 
   # Enter tf.distribute.Strategy scope.
@@ -197,6 +198,7 @@ def model_iteration(model,
       # that determines the number of steps required. To avoid this issue,
       # set validation_steps here if validation_steps is None.
       validation_steps = training_utils.infer_steps_for_dataset(
+          model,
           val_inputs,
           validation_steps,
           epochs=epochs,
@@ -227,7 +229,8 @@ def model_iteration(model,
       verbose=0,  # Handle ProgBarLogger separately in this loop.
       mode=mode)
   # TODO(omalleyt): Handle ProgBar as part of Callbacks once hooks are ready.
-  progbar = training_utils.get_progbar(model, count_mode)
+  progbar = training_utils.get_progbar(
+      model, count_mode, mode != ModeKeys.PREDICT)
   progbar.params = callbacks.params
   progbar.params['verbose'] = verbose
 
@@ -266,7 +269,10 @@ def model_iteration(model,
 
     # Setup work for each epoch
     epoch_logs = {}
-    model.reset_metrics()
+    if mode != ModeKeys.PREDICT:
+      # Collecting and resetting metrics has non-zero cost and will needlessly
+      # slow down model.predict.
+      model.reset_metrics()
     if mode == ModeKeys.TRAIN:
       callbacks.on_epoch_begin(epoch, epoch_logs)
     progbar.on_epoch_begin(epoch, epoch_logs)
@@ -452,6 +458,7 @@ def model_iteration(model,
     if reset_dataset_after_each_epoch and epoch < epochs - 1:
       _reinitialize_iterator(input_iterator, model._distribution_strategy)
 
+  model._successful_loop_finish = True
   callbacks._call_end_hook(mode)
 
   if model._distribution_strategy:
@@ -519,7 +526,7 @@ def _prepare_feed_values(model, inputs, targets, sample_weights, mode):
     # in Distribution Strategy case as it follows the same code path for both
     # eager and graph modes.
     # TODO(priyag,omalleyt): Either we should move the training DS with
-    # IteratorV2 to use training_generator code path, or figure out how to
+    # OwnedIterator to use training_generator code path, or figure out how to
     # set a symbolic Iterator out of a Dataset when in eager mode.
     if context.executing_eagerly():
       return get_distributed_inputs
@@ -533,8 +540,8 @@ def _prepare_feed_values(model, inputs, targets, sample_weights, mode):
         extract_tensors_from_dataset=True)
 
   inputs = training_utils.ModelInputs(inputs).as_list()
-  targets = targets or []
-  sample_weights = sample_weights or []
+  targets = list(targets or [])
+  sample_weights = list(sample_weights or [])
   ins = inputs + targets + sample_weights
   if mode == ModeKeys.TRAIN and not isinstance(K.symbolic_learning_phase(),
                                                int):

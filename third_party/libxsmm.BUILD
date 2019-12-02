@@ -45,25 +45,31 @@ genrule(
 
 cc_library(
     name = "xsmm_avx",
-    srcs = glob([
-        # general source files (translation units)
-        "src/generator_*.c",
-        "src/libxsmm_*.c",
-    ], exclude=[
-        # exclude generators (with main functions)
-        "src/libxsmm_generator_*.c",
-    ]),
-    hdrs = glob([
-        # general header files
-        "include/libxsmm_*.h",
-        # trigger rebuild if template changed
-        "src/template/*.c",
-    ], exclude=[
-        # exclude existing/generated headers
-        "include/libxsmm.h",
-        "include/libxsmm_config.h",
-        "include/libxsmm_dispatch.h",
-    ]) + [
+    srcs = glob(
+        [
+            # general source files (translation units)
+            "src/generator_*.c",
+            "src/libxsmm_*.c",
+        ],
+        exclude = [
+            # exclude generators (with main functions)
+            "src/libxsmm_generator_*.c",
+        ],
+    ),
+    hdrs = glob(
+        [
+            # general header files
+            "include/libxsmm_*.h",
+            # trigger rebuild if template changed
+            "src/template/*.c",
+        ],
+        exclude = [
+            # exclude existing/generated headers
+            "include/libxsmm.h",
+            "include/libxsmm_config.h",
+            "include/libxsmm_dispatch.h",
+        ],
+    ) + [
         # source files included internally
         "src/libxsmm_hash.c",
         # generated header files

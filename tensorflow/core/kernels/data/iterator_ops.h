@@ -22,6 +22,7 @@ limitations under the License.
 #include "tensorflow/core/framework/op_kernel.h"
 #include "tensorflow/core/framework/tensor_shape.h"
 #include "tensorflow/core/framework/types.h"
+#include "tensorflow/core/kernels/data/dataset_utils.h"
 #include "tensorflow/core/kernels/data/unbounded_thread_pool.h"
 #include "tensorflow/core/kernels/ops_util.h"
 
@@ -39,10 +40,15 @@ class IteratorResource : public ResourceBase {
                    FunctionLibraryRuntime* flr)
       : unbounded_thread_pool_(env, "tf_data_iterator_resource"),
         device_mgr_(std::move(device_mgr)),
-        iterator_state_(std::make_shared<State>(
-            std::move(flib_def), std::move(pflr), flr, /*iterator=*/nullptr)),
+        iterator_state_(std::make_shared<State>(std::move(flib_def),
+                                                std::move(pflr), flr,
+                                                /*iterator=*/nullptr)),
         output_dtypes_(output_dtypes),
-        output_shapes_(output_shapes) {}
+        output_shapes_(output_shapes) {
+    VLOG(2) << "constructor";
+  }
+
+  ~IteratorResource() override { VLOG(2) << "destructor"; }
 
   Status GetNext(OpKernelContext* ctx, std::vector<Tensor>* out_tensors,
                  bool* end_of_sequence);
@@ -62,15 +68,25 @@ class IteratorResource : public ResourceBase {
   }
 
  private:
+  // TODO(aaudibert): convert to a class for better encapsulation.
   struct State {
     State(std::shared_ptr<FunctionLibraryDefinition> flib_def,
           std::shared_ptr<ProcessFunctionLibraryRuntime> pflr,
-          FunctionLibraryRuntime* flr, std::unique_ptr<IteratorBase> iterator)
+          FunctionLibraryRuntime* flr,
+          std::unique_ptr<DatasetBaseIterator> iterator)
         : flib_def(flib_def),
           flr(flr),
           pflr(pflr),
           function_handle_cache(absl::make_unique<FunctionHandleCache>(flr)),
           iterator(std::move(iterator)) {}
+
+    ~State() { cancellation_manager.StartCancel(); }
+
+    // Downcasts the given `IteratorBase` to a `DatasetBaseIterator`, and uses
+    // it to set the `iterator` field.
+    void DowncastAndSetIterator(std::unique_ptr<IteratorBase> it) {
+      iterator.reset(static_cast<DatasetBaseIterator*>(it.release()));
+    }
 
     std::shared_ptr<FunctionLibraryDefinition> flib_def;
     FunctionLibraryRuntime* flr = nullptr;  // not owned.
@@ -78,7 +94,7 @@ class IteratorResource : public ResourceBase {
     std::unique_ptr<FunctionHandleCache> function_handle_cache;
     ResourceMgr resource_mgr;
     CancellationManager cancellation_manager;
-    std::unique_ptr<IteratorBase> iterator;
+    std::unique_ptr<DatasetBaseIterator> iterator;
   };
 
   UnboundedThreadPool unbounded_thread_pool_;
@@ -136,70 +152,16 @@ class IteratorHandleOp : public OpKernel {
   string name_;
 };
 
-template <typename T>
-class AnonymousIteratorResourceOp : public OpKernel {
- public:
-  explicit AnonymousIteratorResourceOp(OpKernelConstruction* context)
-      : OpKernel(context) {
-    OP_REQUIRES_OK(context, context->GetAttr("output_types", &output_dtypes_));
-    OP_REQUIRES_OK(context, context->GetAttr("output_shapes", &output_shapes_));
-  }
-
-  void Compute(OpKernelContext* ctx) override {
-    FunctionLibraryRuntime* lib;
-    std::unique_ptr<FunctionLibraryDefinition> flib_def(nullptr);
-    std::unique_ptr<ProcessFunctionLibraryRuntime> pflr(nullptr);
-    OP_REQUIRES_OK(
-        ctx, ctx->function_library()->Clone(&flib_def, &pflr, &lib, true));
-    T* resource;
-    OP_REQUIRES_OK(ctx, CreateResource(ctx, std::move(flib_def),
-                                       std::move(pflr), lib, &resource));
-
-    string unique_name, container_name;
-    GenerateContainerNames(&unique_name, &container_name);
-    ResourceMgr* mgr = ctx->resource_manager();
-    OP_REQUIRES_OK(ctx, mgr->Create<T>(container_name, unique_name, resource));
-
-    Tensor* handle_t;
-    OP_REQUIRES_OK(ctx, ctx->allocate_output(0, TensorShape({}), &handle_t));
-    ResourceHandle handle = MakeResourceHandle(ctx, container_name, unique_name,
-                                               MakeTypeIndex<T>());
-    handle_t->scalar<ResourceHandle>()() = handle;
-
-    if (create_deleter_) {
-      Tensor* deleter_t;
-      OP_REQUIRES_OK(ctx, ctx->allocate_output(1, TensorShape({}), &deleter_t));
-      deleter_t->scalar<Variant>()() =
-          ResourceDeleter(handle, ctx->resource_manager());
-    }
-  }
-
- protected:
-  virtual void GenerateContainerNames(string* unique_name,
-                                      string* container_name) = 0;
-
-  virtual Status CreateResource(
-      OpKernelContext* ctx, std::unique_ptr<FunctionLibraryDefinition> flib_def,
-      std::unique_ptr<ProcessFunctionLibraryRuntime> pflr,
-      FunctionLibraryRuntime* lib, T** resource) = 0;
-
-  DataTypeVector output_dtypes_;
-  std::vector<PartialTensorShape> output_shapes_;
-  bool create_deleter_ = true;
-};
-
 // Like IteratorHandleOp, but creates handles which are never shared, and does
 // not hold a reference to these handles. The latter is important for eager
 // execution, since OpKernel instances generally live as long as the program
 // running them.
-class AnonymousIteratorHandleOp
-    : public AnonymousIteratorResourceOp<IteratorResource> {
+class AnonymousIteratorHandleOp : public AnonymousResourceOp<IteratorResource> {
  public:
   explicit AnonymousIteratorHandleOp(OpKernelConstruction* context);
 
  private:
-  void GenerateContainerNames(string* unique_name,
-                              string* container_name) override;
+  string name() override;
 
   Status CreateResource(OpKernelContext* ctx,
                         std::unique_ptr<FunctionLibraryDefinition> flib_def,
@@ -207,6 +169,8 @@ class AnonymousIteratorHandleOp
                         FunctionLibraryRuntime* lib,
                         IteratorResource** resource) override;
 
+  DataTypeVector output_dtypes_;
+  std::vector<PartialTensorShape> output_shapes_;
   const int graph_def_version_;
 };
 

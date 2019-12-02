@@ -31,6 +31,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
 #include "tensorflow/compiler/xla/service/hlo_dataflow_analysis.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
+#include "tensorflow/compiler/xla/service/hlo_live_range.h"
 #include "tensorflow/compiler/xla/service/hlo_ordering.h"
 #include "tensorflow/compiler/xla/service/hlo_schedule.h"
 #include "tensorflow/compiler/xla/service/tuple_points_to_analysis.h"
@@ -165,7 +166,8 @@ class HeapSimulator {
 
   Status RunComputation(const HloComputation& computation,
                         const HloInstructionSequence& instruction_sequence,
-                        const HloAliasAnalysis& alias_analysis);
+                        const HloAliasAnalysis& alias_analysis,
+                        HloLiveRange* live_range);
 
   bool IgnoreBuffer(const HloValue* buffer) const;
   void Alloc(const HloValue* buffer, const HloInstruction* instruction);
@@ -203,15 +205,6 @@ class HeapSimulator {
   // Hold some sets for error-checking the sequence of Alloc and Free calls.
   absl::flat_hash_set<const HloValue*> allocated_buffers_;
   absl::flat_hash_set<const HloValue*> freed_buffers_;
-
-  // The flattened sequence of all instructions in the module. It contains the
-  // same information as instruction_schedule_, but allows fast indexing using
-  // the schedule index.
-  HloInstructionSequence flattened_instruction_sequence_;
-  // instruction_schedule and computation_schedule are the maps that track each
-  // instruction/computation and their ordinal in the schedule.
-  absl::flat_hash_map<const HloInstruction*, int64> instruction_schedule_;
-  absl::flat_hash_map<const HloComputation*, int64> computation_schedule_;
 
   // Debugging information filled in while the heap simulator runs.
   HeapSimulatorTrace debug_trace_;
@@ -264,27 +257,6 @@ class HeapAlgorithm {
   // Finish collects the buffer offset assignment results.  Free may only be
   // called once, after the Alloc and Free calls.
   virtual Result Finish() = 0;
-
-  // Heap algorithms can optionally make use of the instruction/computation
-  // schedule. These data structures are guaranteed to be valid while Finish()
-  // is being called.
-  virtual void SetSchedules(
-      const HloInstructionSequence* flattened_instruction_sequence,
-      const absl::flat_hash_map<const HloInstruction*, int64>*
-          instruction_schedule,
-      const absl::flat_hash_map<const HloComputation*, int64>*
-          computation_schedule) {
-    flattened_instruction_sequence_ = flattened_instruction_sequence;
-    instruction_schedule_ = instruction_schedule;
-    computation_schedule_ = computation_schedule;
-  }
-
- protected:
-  const HloInstructionSequence* flattened_instruction_sequence_;
-  const absl::flat_hash_map<const HloInstruction*, int64>*
-      instruction_schedule_;
-  const absl::flat_hash_map<const HloComputation*, int64>*
-      computation_schedule_;
 };
 
 // NoFragmentationStatsHeap computes the heap size assuming no fragmentation;
@@ -324,20 +296,6 @@ class GlobalDecreasingSizeBestFitHeap : public HeapAlgorithm {
     kTemporal,
   };
 
-  explicit GlobalDecreasingSizeBestFitHeap(int64 alignment,
-                                           Type type = kSpatial)
-      : alignment_(alignment), type_(type) {}
-  ~GlobalDecreasingSizeBestFitHeap() override {}
-
-  void Alloc(const HloValue* buffer, int64 size) override;
-  void Free(const HloValue* buffer, int64 size) override;
-
-  void ShareWith(const HloValue* buffer, const HloValue* share_with,
-                 int64 size) override;
-
-  Result Finish() override;
-
- protected:
   // BufferInterval stores a buffer's size and time interval.
   struct BufferInterval {
     const HloValue* buffer;
@@ -355,6 +313,27 @@ class GlobalDecreasingSizeBestFitHeap : public HeapAlgorithm {
     bool need_allocation;
   };
 
+  // Comparison function that is used to store buffer intervals.
+  using BufferIntervalCompare =
+      std::function<bool(const BufferInterval&, const BufferInterval&)>;
+
+  explicit GlobalDecreasingSizeBestFitHeap(int64 alignment,
+                                           Type type = kSpatial);
+  ~GlobalDecreasingSizeBestFitHeap() override {}
+
+  void Alloc(const HloValue* buffer, int64 size) override;
+  void Free(const HloValue* buffer, int64 size) override;
+
+  void ShareWith(const HloValue* buffer, const HloValue* share_with,
+                 int64 size) override;
+
+  Result Finish() override;
+
+  // Return a BufferIntervalCompare function that sort by spatial size. We don't
+  // look at co-locates as they should have the same size.
+  static BufferIntervalCompare GetSpatialBufferIntervalCompare();
+
+ protected:
   // Node in BufferIntervalTree that stores the alloc and free times of a
   // buffer, and the chunk assigned to it.
   struct BufferIntervalTreeNode {
@@ -395,7 +374,7 @@ class GlobalDecreasingSizeBestFitHeap : public HeapAlgorithm {
     int64 heap_size;
   };
 
-  // Returns the buffer intervals sorted according to type_.
+  // Returns the buffer intervals sorted according to buffer_interval_compare_.
   std::vector<BufferInterval> GetSortedBufferIntervals() const;
 
   // These two methods below are exposed to other heap algorithms that inherit
@@ -413,12 +392,19 @@ class GlobalDecreasingSizeBestFitHeap : public HeapAlgorithm {
   // Adds the buffer and the chunk to the result chunk map.
   virtual void AddToChunkMap(const HloValue* buffer, Chunk chunk);
 
+  // Return a BufferIntervalCompare function that sorts by live ranges.  A live
+  // range is defined by the range between the start of the first buffer and the
+  // end of the last co-located buffer.  There could be "holes" in the live
+  // ranges of each co-located buffers, but in this heuristics we think they are
+  // contiguous.
+  BufferIntervalCompare GetTemporalBufferIntervalCompare() const;
+
   absl::flat_hash_map<const HloValue*, BufferInterval> buffer_intervals_;
   Result result_;
+  BufferIntervalCompare buffer_interval_compare_;
 
  private:
   int64 alignment_;
-  Type type_;
 
   // The current time represented as an integer. It increments by 1 at each
   // Alloc or Free call.
