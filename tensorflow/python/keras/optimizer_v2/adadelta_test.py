@@ -18,8 +18,6 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import platform
-
 import numpy as np
 
 from tensorflow.python.eager import context
@@ -35,7 +33,7 @@ from tensorflow.python.platform import test
 
 _DATA_TYPES = [dtypes.half, dtypes.float32, dtypes.float64]
 # TODO(b/143684500): Eigen to support complex sqrt
-if not test_util.IsBuiltWithNvcc() and platform.system() != "Windows":
+if (not test_util.IsBuiltWithNvcc() and not test.is_built_with_rocm()):
   _DATA_TYPES += [dtypes.complex64, dtypes.complex128]
 
 
@@ -120,14 +118,14 @@ class AdadeltaOptimizerTest(test.TestCase):
               # TODO(lxuechen): This is hard to test in eager mode
               for slot_idx in range(2):
                 self.assertAllCloseAccordingToType(
-                    np.array([accum, accum], dtype=dtype.as_numpy_dtype()),
+                    np.array([accum, accum], dtype=dtype.as_numpy_dtype(0)),
                     self.evaluate(slot[slot_idx]),
                     rtol=1e-5)
 
                 self.assertAllCloseAccordingToType(
                     np.array(
                         [accum_update, accum_update],
-                        dtype=dtype.as_numpy_dtype()),
+                        dtype=dtype.as_numpy_dtype(0)),
                     self.evaluate(slot_update[slot_idx]),
                     rtol=1e-5)
 
@@ -135,14 +133,14 @@ class AdadeltaOptimizerTest(test.TestCase):
               self.assertAllCloseAccordingToType(
                   np.array(
                       [var0_init[0] - tot_update, var0_init[1] - tot_update],
-                      dtype=dtype.as_numpy_dtype()),
+                      dtype=dtype.as_numpy_dtype(0)),
                   self.evaluate(var0),
                   rtol=1e-5)
 
               self.assertAllCloseAccordingToType(
                   np.array(
                       [var1_init[0] - tot_update, var1_init[1] - tot_update],
-                      dtype=dtype.as_numpy_dtype()),
+                      dtype=dtype.as_numpy_dtype(0)),
                   self.evaluate(var1),
                   rtol=1e-5)
 

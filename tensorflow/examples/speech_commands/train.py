@@ -78,8 +78,8 @@ import numpy as np
 from six.moves import xrange  # pylint: disable=redefined-builtin
 import tensorflow as tf
 
-import input_data
-import models
+import tensorflow.examples.speech_commands.input_data as input_data
+import tensorflow.examples.speech_commands.models as models
 from tensorflow.python.platform import gfile
 
 FLAGS = None
@@ -157,7 +157,7 @@ def main(_):
   if FLAGS.quantize:
     try:
       tf.contrib.quantize.create_training_graph(quant_delay=0)
-    except ImportError as e:
+    except AttributeError as e:
       msg = e.args[0]
       msg += ('\n\n The --quantize option still requires contrib, which is not '
               'part of TensorFlow 2.0. Please install a previous version:'
@@ -398,7 +398,8 @@ if __name__ == '__main__':
       '--window_stride_ms',
       type=float,
       default=10.0,
-      help='How far to move in time between spectogram timeslices.',)
+      help='How far to move in time between spectrogram timeslices.',
+  )
   parser.add_argument(
       '--feature_bin_count',
       type=int,

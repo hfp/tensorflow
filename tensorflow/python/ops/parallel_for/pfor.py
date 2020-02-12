@@ -55,6 +55,7 @@ from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn_ops
 from tensorflow.python.ops import parsing_ops
 from tensorflow.python.ops import sparse_ops
+from tensorflow.python.ops import special_math_ops
 from tensorflow.python.ops import tensor_array_ops
 from tensorflow.python.platform import flags
 from tensorflow.python.platform import tf_logging as logging
@@ -121,7 +122,7 @@ class WhileOp(object):
     """
     self._pfor_config = pfor_config
     self._pfor_ops = set(pfor_ops)
-    self._pfor_op_ids = set([x._id for x in pfor_ops])
+    self._pfor_op_ids = set(x._id for x in pfor_ops)
     assert isinstance(exit_node, ops.Tensor)
     self._while_context = exit_node.op._get_control_flow_context()
     assert isinstance(self._while_context, control_flow_ops.WhileContext)
@@ -759,8 +760,8 @@ class _PforInput(object):
       else:
         input_name = "\"%s\"" % op_def.input_arg[index].name
       raise ValueError(
-          "Input %s of op \"%s\" expected to be not loop invariant" % (
-              input_name, op_type))
+          "Input %s of op \"%s\" expected to be not loop invariant" %
+          (input_name, op_type))
     return t
 
   def unstacked_input(self, index):
@@ -772,8 +773,8 @@ class _PforInput(object):
         input_name = "at index %d" % index
       else:
         input_name = "\"%s\"" % op_def.input_arg[index].name
-      raise ValueError("Input %s of op \"%s\" expected to be loop invariant" % (
-          input_name, op_type))
+      raise ValueError("Input %s of op \"%s\" expected to be loop invariant" %
+                       (input_name, op_type))
     return t
 
   @property
@@ -1021,8 +1022,8 @@ class PForConfig(object):
     for arg in args:
       if not isinstance(arg, ops.Tensor):
         raise ValueError("Got a non-Tensor argument %s in reduce" % arg)
-      batched_shape = tensor_shape.TensorShape(
-          [self._maybe_iters]).concatenate(arg.shape)
+      batched_shape = tensor_shape.TensorShape([self._maybe_iters
+                                               ]).concatenate(arg.shape)
       tensor_specs.append(
           tensor_spec.TensorSpec(shape=batched_shape, dtype=arg.dtype))
     concrete_function = def_function.function(fn).get_concrete_function(
@@ -1176,7 +1177,7 @@ class PFor(object):
     self._conversion_map = object_identity.ObjectIdentityDictionary()
     self._conversion_map[loop_var] = wrap(self.all_indices, True)
     self._pfor_ops = set(pfor_ops)
-    self._pfor_op_ids = set([x._id for x in pfor_ops])
+    self._pfor_op_ids = set(x._id for x in pfor_ops)
     self._pfor_config = pfor_config
 
   def op_is_inside_loop(self, op):
@@ -1465,19 +1466,17 @@ class PFor(object):
           try:
             new_outputs = converter(pfor_inputs)
           except Exception as e:  # pylint: disable=broad-except
-            logging.error("Got error while pfor was converting op %s"
-                          "with inputs %s\n, converted inputs %s\n"
-                          "%s\n"
-                          "Here are the pfor conversion stack traces:" % (
-                              y_op,
-                              y_op.inputs[:],
-                              pfor_inputs.inputs,
-                              str(e)))
+            logging.error(
+                "Got error while pfor was converting op %s"
+                "with inputs %s\n, converted inputs %s\n"
+                "%s\n"
+                "Here are the pfor conversion stack traces:", y_op,
+                y_op.inputs[:], pfor_inputs.inputs, str(e))
             original_op = y_op
             while isinstance(original_op, ops.Operation):
-              logging.error("%s\ncreated at:\n  %s" % (
-                  original_op,
-                  "  ".join(traceback.format_list(original_op.traceback))))
+              logging.error(
+                  "%s\ncreated at:\n  %s", original_op,
+                  "  ".join(traceback.format_list(original_op.traceback)))
               original_op = original_op._original_op
             six.reraise(e.__class__, e, sys.exc_info()[2])
 
@@ -1579,6 +1578,7 @@ def _inputs_with_flattening(pfor_input, input_indices):
 
 
 @RegisterPForWithArgs("Conv2D", dims=[0])
+@RegisterPForWithArgs("DepthToSpace", dims=[0])
 @RegisterPForWithArgs("AvgPool", dims=[0])
 @RegisterPForWithArgs("MaxPool", dims=[0])
 @RegisterPForWithArgs("MaxPool3D", dims=[0])
@@ -1587,6 +1587,7 @@ def _inputs_with_flattening(pfor_input, input_indices):
 @RegisterPForWithArgs("MaxPool3DGradGrad", dims=[0, 1, 2])
 @RegisterPForWithArgs("MaxPoolGradGrad", dims=[0, 1, 2])
 @RegisterPForWithArgs("SoftmaxCrossEntropyWithLogits", dims=[0, 1])
+@RegisterPForWithArgs("SpaceToDepth", dims=[0])
 def _convert_flatten_batch(pfor_input, op_type, dims):
   del op_type
   inputs = _inputs_with_flattening(pfor_input, dims)
@@ -1621,7 +1622,7 @@ def _channel_flatten_input(x, data_format):
   """
 
   graph = ops.get_default_graph()
-  cache_key = (graph, x.experimental_ref(), data_format)
+  cache_key = (graph, x.ref(), data_format)
   if cache_key not in _channel_flatten_input_cache:
     x_shape = array_ops.shape(x)
     if data_format == b"NCHW":
@@ -1922,6 +1923,18 @@ def _convert_matrix_diag_v2(pfor_input):
   return wrap(array_ops.matrix_diag(**params), True)
 
 
+@RegisterPFor("Diag")
+def _convert_diag(pfor_input):
+  diag = pfor_input.stacked_input(0)
+  if diag.shape.ndims == 2:
+    # We can use matrix_diag.
+    return wrap(array_ops.matrix_diag(diag), True)
+  else:
+    # It is not clear if we can do better than a while loop here with existing
+    # kernels.
+    return _fallback_converter(pfor_input)
+
+
 # See notes for MatrixDiagV2
 @RegisterPFor("MatrixDiagPartV2")
 @RegisterPFor("MatrixDiagPartV3")
@@ -1951,6 +1964,18 @@ def _convert_matrix_set_diag_v2(pfor_input):
     return wrap(array_ops.matrix_set_diag_v2(**params), True)
   params["align"] = pfor_input.get_attr("align")
   return wrap(array_ops.matrix_set_diag(**params), True)
+
+
+@RegisterPFor("DiagPart")
+def _convert_diag_part(pfor_input):
+  inp = pfor_input.stacked_input(0)
+  if inp.shape.ndims == 3:
+    # We can use matrix_diag_part.
+    return wrap(array_ops.matrix_diag_part(inp), True)
+  else:
+    # It is not clear if we can do better than a while loop here with existing
+    # kernels.
+    return _fallback_converter(pfor_input)
 
 
 @RegisterPFor("OneHot")
@@ -2101,9 +2126,9 @@ def _convert_gather(pfor_input):
     param_flat = _flatten_first_two_dims(param)
 
     # Recompute indices to handle stacked param.
-    indices_offset = (math_ops.range(math_ops.cast(loop_len_vector[0],
-                                                   dtype=indices.dtype)) *
-                      math_ops.cast(array_ops.shape(param)[1], indices.dtype))
+    indices_offset = (
+        math_ops.range(math_ops.cast(loop_len_vector[0], dtype=indices.dtype)) *
+        math_ops.cast(array_ops.shape(param)[1], indices.dtype))
     # Reshape indices_offset to allow broadcast addition
     ones = array_ops.ones([array_ops.rank(indices) - 1], dtype=dtypes.int32)
     new_shape = array_ops.concat([loop_len_vector, ones], axis=0)
@@ -2324,6 +2349,16 @@ def _convert_reduction(pfor_input, _, op_func):
   return wrap(op_func(t, indices, keepdims=keep_dims), True)
 
 
+@RegisterPForWithArgs("ArgMax", math_ops.argmax)
+@RegisterPForWithArgs("ArgMin", math_ops.argmin)
+def _convert_argmax_argmin(pfor_input, _, op_func):
+  t = pfor_input.stacked_input(0)
+  dimension = pfor_input.unstacked_input(1)
+  dimension += math_ops.cast(dimension >= 0, dimension.dtype)
+  output_type = pfor_input.get_attr("output_type")
+  return wrap(op_func(t, axis=dimension, output_type=output_type), True)
+
+
 @RegisterPForWithArgs("Cumsum", math_ops.cumsum)
 @RegisterPForWithArgs("Cumprod", math_ops.cumprod)
 def _convert_cumfoo(pfor_input, _, op_func):
@@ -2496,6 +2531,7 @@ def _convert_cast(pfor_input):
 @RegisterPForWithArgs("Conj", math_ops.conj)
 @RegisterPForWithArgs("Cos", math_ops.cos)
 @RegisterPForWithArgs("Cosh", math_ops.cosh)
+@RegisterPForWithArgs("Dawsn", special_math_ops.dawsn)
 @RegisterPForWithArgs("Digamma", math_ops.digamma)
 @RegisterPForWithArgs("Div", math_ops.div)
 @RegisterPForWithArgs("DivNoNan", math_ops.div_no_nan)
@@ -2504,10 +2540,13 @@ def _convert_cast(pfor_input):
 @RegisterPForWithArgs("Erfc", math_ops.erfc)
 @RegisterPForWithArgs("Erfinv", math_ops.erfinv)
 @RegisterPForWithArgs("Exp", math_ops.exp)
+@RegisterPForWithArgs("Expint", special_math_ops.expint)
 @RegisterPForWithArgs("Expm1", math_ops.expm1)
 @RegisterPForWithArgs("Floor", math_ops.floor)
 @RegisterPForWithArgs("FloorDiv", math_ops.floor_div)
 @RegisterPForWithArgs("FloorMod", math_ops.floor_mod)
+@RegisterPForWithArgs("FresnelCos", special_math_ops.fresnel_cos)
+@RegisterPForWithArgs("FresnelSin", special_math_ops.fresnel_sin)
 @RegisterPForWithArgs("Greater", math_ops.greater)
 @RegisterPForWithArgs("GreaterEqual", math_ops.greater_equal)
 @RegisterPForWithArgs("Igamma", math_ops.igamma)
@@ -2554,6 +2593,7 @@ def _convert_cast(pfor_input):
 @RegisterPForWithArgs("Sinh", math_ops.sinh)
 @RegisterPForWithArgs("Softplus", nn_ops.softplus)
 @RegisterPForWithArgs("Softsign", nn_ops.softsign)
+@RegisterPForWithArgs("Spence", special_math_ops.spence)
 @RegisterPForWithArgs("Sqrt", math_ops.sqrt)
 @RegisterPForWithArgs("Square", math_ops.square)
 @RegisterPForWithArgs("SquaredDifference", math_ops.squared_difference)
@@ -2564,6 +2604,7 @@ def _convert_cast(pfor_input):
 @RegisterPForWithArgs("TruncateMod", math_ops.truncate_mod)
 @RegisterPForWithArgs("Xdivy", math_ops.xdivy)
 @RegisterPForWithArgs("Xlogy", math_ops.xlogy)
+@RegisterPForWithArgs("Xlog1py", math_ops.xlog1py)
 @RegisterPForWithArgs("Zeta", math_ops.zeta)
 def _convert_cwise(pfor_input, op_type, op_func):
   # Note that ops handled here do not have attributes except those listed below
@@ -2821,10 +2862,9 @@ def _convert_multinomial(pfor_input):
 # linalg_ops
 
 
-# TODO(jmenick) - the same logic applies to other einsums. Generalize this
-# in a future CL.
-@RegisterPFor("XlaEinsum")
-def _convert_einsum(pfor_input):
+@RegisterPForWithArgs("XlaEinsum")
+@RegisterPForWithArgs("Einsum")
+def _convert_einsum(pfor_input, op_type):
   first_input, first_input_stacked, _ = pfor_input.input(0)
   second_input, second_input_stacked, _ = pfor_input.input(1)
 
@@ -2853,7 +2893,12 @@ def _convert_einsum(pfor_input):
   output_expr = "{}{}".format(chosen_symbol, output_expr)
 
   new_equation = "{},{}->{}".format(input_a_expr, input_b_expr, output_expr)
-  result = xla.einsum(equation=new_equation, a=first_input, b=second_input)
+  if op_type == "XlaEinsum":
+    result = xla.einsum(equation=new_equation, a=first_input, b=second_input)
+  else:
+    assert op_type == "Einsum"
+    result = special_math_ops.einsum(new_equation, first_input, second_input)
+
   return wrap(result, True)
 
 
@@ -2869,11 +2914,29 @@ def _convert_log_matrix_determinant(pfor_input):
   return [wrap(x, True) for x in linalg_ops.log_matrix_determinant(t)]
 
 
-@RegisterPFor("MatrixTriangularSolve")
-def _convert_matrix_triangular_solve(pfor_input):
+@RegisterPFor("MatrixInverse")
+def _convert_matrix_inverse(pfor_input):
+  t = pfor_input.stacked_input(0)
+  adjoint = pfor_input.get_attr("adjoint")
+  return wrap(gen_linalg_ops.matrix_inverse(t, adjoint=adjoint), True)
+
+
+@RegisterPFor("MatrixSolve")
+def _convert_matrix_solve(pfor_input):
   pfor_input.stack_inputs()
   matrix = pfor_input.stacked_input(0)
   rhs = pfor_input.stacked_input(1)
+  adjoint = pfor_input.get_attr("adjoint")
+  output = gen_linalg_ops.matrix_solve(
+      matrix, rhs, adjoint=adjoint)
+  return wrap(output, True)
+
+
+@RegisterPFor("MatrixTriangularSolve")
+def _convert_matrix_triangular_solve(pfor_input):
+  pfor_input.expanddim_inputs_for_broadcast()
+  matrix = pfor_input.input(0)[0]
+  rhs = pfor_input.input(1)[0]
   lower = pfor_input.get_attr("lower")
   adjoint = pfor_input.get_attr("adjoint")
   output = linalg_ops.matrix_triangular_solve(

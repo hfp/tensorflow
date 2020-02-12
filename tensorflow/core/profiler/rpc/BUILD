@@ -12,10 +12,12 @@ cc_library(
         "//tensorflow/core:framework",
         "//tensorflow/core:lib",
         "//tensorflow/core/profiler:profiler_service_proto_cc",
-        "//tensorflow/core/profiler/lib:profiler_lib",
+        "//tensorflow/core/profiler/convert:xplane_to_profile_response",
         "//tensorflow/core/profiler/lib:profiler_session",
+        "//tensorflow/core/profiler/protobuf:xplane_proto_cc",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/strings",
     ],
-    alwayslink = True,
 )
 
 cc_library(
@@ -28,8 +30,8 @@ cc_library(
         "//tensorflow:grpc++",
         "//tensorflow/core:framework",
         "//tensorflow/core:lib",
+        "//tensorflow/core:lib_internal",
         "//tensorflow/core/profiler:profiler_service_proto_cc",
-        "//tensorflow/core/profiler/lib:profiler_lib",
-        "//tensorflow/core/profiler/lib:profiler_session",
+        "@com_google_absl//absl/strings",
     ],
 )

@@ -36,6 +36,7 @@ from tensorflow.python.keras.utils import layer_utils
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import state_ops
+from tensorflow.python.ops.ragged import ragged_factory_ops
 from tensorflow.python.platform import test
 from tensorflow.python.training.tracking.util import Checkpoint
 
@@ -120,61 +121,6 @@ class NetworkConstructionTest(keras_parameterized.TestCase):
     self.assertEqual(len(layer.updates), 2)
     self.assertEqual(len(layer.get_updates_for(x1)), 2)
     self.assertEqual(len(layer.get_updates_for(None)), 0)
-
-  @test_util.run_deprecated_v1
-  def test_get_losses(self):
-
-    class MyLayer(keras.layers.Layer):
-
-      def build(self, input_shape):
-        self.a = self.add_variable('a',
-                                   (1, 1),
-                                   'float32',
-                                   trainable=False)
-        self.b = self.add_variable('b',
-                                   (1, 1),
-                                   'float32',
-                                   trainable=False)
-        self.add_loss(math_ops.reduce_sum(self.a))
-        self.built = True
-
-      def call(self, inputs):
-        self.add_loss(math_ops.reduce_sum(inputs),
-                      inputs=True)
-        return inputs + 1
-
-    x1 = input_layer_lib.Input(shape=(1,))
-    layer = MyLayer()
-    _ = layer(x1)
-
-    self.assertEqual(len(layer.losses), 2)
-    self.assertEqual(len(layer.get_losses_for(x1)), 1)
-    self.assertEqual(len(layer.get_losses_for(None)), 1)
-
-    x2 = input_layer_lib.Input(shape=(1,))
-    y2 = layer(x2)
-
-    self.assertEqual(len(layer.losses), 3)
-    self.assertEqual(len(layer.get_losses_for(x1)), 1)
-    self.assertEqual(len(layer.get_losses_for(x2)), 1)
-    self.assertEqual(len(layer.get_losses_for(None)), 1)
-
-    network = network_lib.Network(x2, y2)
-    self.assertEqual(len(network.losses), 3)
-    self.assertEqual(len(network.get_losses_for(x1)), 1)
-    self.assertEqual(len(network.get_losses_for(x2)), 1)
-    self.assertEqual(len(network.get_losses_for(None)), 1)
-
-    x3 = input_layer_lib.Input(shape=(1,))
-    _ = layer(x3)
-    self.assertEqual(len(network.losses), 4)
-
-    x4 = input_layer_lib.Input(shape=(1,))
-    _ = network(x4)
-    self.assertEqual(len(network.losses), 5)
-    self.assertEqual(len(network.get_losses_for(x2)), 1)
-    self.assertEqual(len(network.get_losses_for(x4)), 1)
-    self.assertEqual(len(network.get_losses_for(None)), 1)
 
   @test_util.run_in_graph_and_eager_modes()
   def testTopologicalAttributes(self):
@@ -1004,6 +950,54 @@ class NetworkConstructionTest(keras_parameterized.TestCase):
         x=[3 * np.ones((10, 10)), 7 * np.ones((10, 10))],
         y=10 * np.ones((10, 10)),
         batch_size=2)
+    # Check that second input was correctly added to first.
+    self.assertEqual(history.history['loss'][0], 0.0)
+
+  @keras_parameterized.run_all_keras_modes
+  def test_composite_call_kwarg_derived_from_keras_layer(self):
+
+    # Create a test layer that accepts composite tensor inputs (note the
+    # 'supports_ragged_inputs = True' in the init method.)
+    class MaybeAdd(keras.layers.Layer):
+
+      def __init__(self, **kwargs):
+        super(MaybeAdd, self).__init__(**kwargs)
+        self._supports_ragged_inputs = True
+
+      def call(self, x1, x2=None):
+        # We need to convert this to a tensor for loss calculations -
+        # losses don't play nicely with ragged tensors yet.
+        if x2 is not None:
+          return (x1 + x2).to_tensor(default_value=0)
+        return x1.to_tensor(default_value=0)
+
+    input1 = keras.Input((None,), ragged=True)
+    input2 = keras.Input((None,), ragged=True)
+    outputs = MaybeAdd()(input1, x2=input2)
+    model = keras.Model([input1, input2], outputs)
+    model.compile(
+        'sgd',
+        'mse',
+        run_eagerly=testing_utils.should_run_eagerly(),
+        experimental_run_tf_function=testing_utils.should_run_tf_function())
+    input_data = [
+        ragged_factory_ops.constant([[3.0, 3.0], [3.0, 3.0], [3.0]]),
+        ragged_factory_ops.constant([[7.0, 7.0], [7.0, 7.0], [7.0]])
+    ]
+    expected_data = np.array([[10.0, 10.0], [10.0, 10.0], [10.0, 0.0]])
+
+    history = model.fit(x=input_data, y=expected_data)
+    # Check that second input was correctly added to first.
+    self.assertEqual(history.history['loss'][0], 0.0)
+
+    model = keras.Model.from_config(
+        model.get_config(), custom_objects={'MaybeAdd': MaybeAdd})
+    model.compile(
+        'sgd',
+        'mse',
+        run_eagerly=testing_utils.should_run_eagerly(),
+        experimental_run_tf_function=testing_utils.should_run_tf_function())
+    history = model.fit(x=input_data, y=expected_data)
     # Check that second input was correctly added to first.
     self.assertEqual(history.history['loss'][0], 0.0)
 
