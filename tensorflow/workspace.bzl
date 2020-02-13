@@ -219,11 +219,11 @@ def tf_repositories(path_prefix = "", tf_repo_name = ""):
     tf_http_archive(
         name = "libxsmm_archive",
         build_file = clean_dep("//third_party:libxsmm.BUILD"),
-        sha256 = "9c0af4509ea341d1ee2c6c19fc6f19289318c3bd4b17844efeb9e7f9691abf76",
-        strip_prefix = "libxsmm-1.14",
+        sha256 = "1fe184de94374f952839931e6179d9c79951b32abcd73d0a05a63555d23ebdea",
+        strip_prefix = "libxsmm-38774071d7462a43f9d96b7dae0daff11a8b412c",
         urls = [
-            "https://storage.googleapis.com/mirror.tensorflow.org/github.com/hfp/libxsmm/archive/1.14.tar.gz",
-            "https://github.com/hfp/libxsmm/archive/1.14.tar.gz",
+            "https://storage.googleapis.com/mirror.tensorflow.org/github.com/hfp/libxsmm/archive/38774071d7462a43f9d96b7dae0daff11a8b412c.tar.gz",
+            "https://github.com/hfp/libxsmm/archive/38774071d7462a43f9d96b7dae0daff11a8b412c.tar.gz",
         ],
     )
 
