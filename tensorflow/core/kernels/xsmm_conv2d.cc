@@ -25,7 +25,6 @@ void dummy_xsmm_conv2d_ensure_file_is_not_empty();
 
 #include "tensorflow/core/kernels/xsmm_conv2d.h"
 
-#include <stdlib.h>
 #include <cstring>
 #if defined(_OPENMP) && defined(LIBXSMM_USE_OPENMP)
 #include <omp.h>
