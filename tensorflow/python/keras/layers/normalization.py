@@ -503,7 +503,7 @@ class BatchNormalizationBase(Layer):
   def _assign_moving_average(self, variable, value, momentum, inputs_size):
     with K.name_scope('AssignMovingAvg') as scope:
       with ops.colocate_with(variable):
-        decay = ops.convert_to_tensor(1.0 - momentum, name='decay')
+        decay = ops.convert_to_tensor_v2(1.0 - momentum, name='decay')
         if decay.dtype != variable.dtype.base_dtype:
           decay = math_ops.cast(decay, variable.dtype.base_dtype)
         update_delta = (
@@ -566,7 +566,7 @@ class BatchNormalizationBase(Layer):
                                      lambda: self.momentum,
                                      lambda: 1.0)
     else:
-      momentum = ops.convert_to_tensor(self.momentum)
+      momentum = ops.convert_to_tensor_v2(self.momentum)
     if training_value or training_value is None:
       def mean_update():
         return self._assign_moving_average(self.moving_mean, mean, momentum,
@@ -675,8 +675,10 @@ class BatchNormalizationBase(Layer):
         training = bool(training)
       if base_layer_utils.is_in_keras_graph():
         training = math_ops.logical_and(training, self._get_trainable_var())
-      else:
-        training = math_ops.logical_and(training, self.trainable)
+      elif not self.trainable:
+        # When the layer is not trainable, it overrides the value passed from
+        # model.
+        training = self.trainable
     return training
 
   def call(self, inputs, training=None):
@@ -757,13 +759,11 @@ class BatchNormalizationBase(Layer):
       moving_mean = self.moving_mean
       moving_variance = self.moving_variance
 
-      mean = tf_utils.smart_cond(training,
-                                 lambda: mean,
-                                 lambda: ops.convert_to_tensor(moving_mean))
+      mean = tf_utils.smart_cond(training, lambda: mean,
+                                 lambda: ops.convert_to_tensor_v2(moving_mean))
       variance = tf_utils.smart_cond(
-          training,
-          lambda: variance,
-          lambda: ops.convert_to_tensor(moving_variance))
+          training, lambda: variance,
+          lambda: ops.convert_to_tensor_v2(moving_variance))
 
       if self.virtual_batch_size is not None:
         # This isn't strictly correct since in ghost batch norm, you are

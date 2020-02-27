@@ -16,7 +16,7 @@ limitations under the License.
 // This is the legalization pattern definition file for TF to XLA.
 
 include "mlir/IR/OpBase.td"
-include "mlir/Dialect/StandardOps/Ops.td"
+include "mlir/Dialect/StandardOps/IR/Ops.td"
 include "tensorflow/compiler/mlir/tensorflow/ir/tf_ops.td"
 include "tensorflow/compiler/mlir/xla/ir/hlo_ops.td"
 
@@ -368,16 +368,22 @@ def : Pat<(TF_ConstOp:$res ElementsAttr:$value), (HLO_ConstOp $value),
 // Relu op patterns.
 //===----------------------------------------------------------------------===//
 
-// TODO(hinsu): Support dynamic but ranked input by using scalar constants
-// along with broadcast_dimensions attribute. Similarly, Relu6 op with
-// non-static shape inputs can be lowered.
-def : Pat<(TF_ReluOp AnyStaticShapeTensor:$input),
-          (HLO_MaxOp (HLO_ConstOp (ConstantSplat<"0"> $input)), $input,
-                     (NullDenseIntElementsAttr))>;
+// TODO(hinsu): Make these patterns to TF to TF lowering. Relu6 lowering will
+// require HLO canonicalization of min and max on a tensor to ClampOp.
 
-def : Pat<(TF_Relu6Op AnyStaticShapeTensor:$input),
-          (HLO_ClampOp (HLO_ConstOp (ConstantSplat<"0"> $input)), $input,
-                       (HLO_ConstOp (ConstantSplat<"6"> $input)))>;
+// TODO(hinsu): Lower unsinged and quantized types after supporting
+// them in GetScalarOfType.
+def : Pat<(TF_ReluOp AnyRankedTensor:$input),
+          (HLO_MaxOp (HLO_ConstOp:$zero (GetScalarOfType<0> $input)), $input,
+                     (BinBroadcastDimensions $zero, $input)),
+          [(TF_SintOrFpTensor $input)]>;
+
+// TODO(hinsu): Lower unsinged and quantized types after supporting
+// them in GetScalarOfType.
+def : Pat<(TF_Relu6Op AnyRankedTensor:$input),
+          (HLO_ClampOp (HLO_ConstOp (GetScalarOfType<0> $input)), $input,
+                       (HLO_ConstOp (GetScalarOfType<6> $input))),
+          [(TF_SintOrFpTensor $input)]>;
 
 // ReluGrad(gradients, features) = gradients * (features > 0)
 //
@@ -498,8 +504,8 @@ def : Pat<(TF_SignOp $x),
           )>;
 
 def BothElementTypesSameWidthIntOrFloat : Constraint<CPred<
-  "getElementTypeOrSelf($0.getType()).isIntOrFloat() && "
-  "getElementTypeOrSelf($1.getType()).isIntOrFloat() && "
+  "getElementTypeOrSelf($0.getType()).isSignlessIntOrFloat() && "
+  "getElementTypeOrSelf($1.getType()).isSignlessIntOrFloat() && "
   "getElementTypeOrSelf($0.getType()).getIntOrFloatBitWidth() == "
   "getElementTypeOrSelf($1.getType()).getIntOrFloatBitWidth()">,
   "element types must be integers or floats of same width">;

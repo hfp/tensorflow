@@ -23,7 +23,6 @@ limitations under the License.
 #include "absl/strings/match.h"
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_split.h"
-#include "tensorflow/core/distributed_runtime/rpc/grpc_util.h"
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/lib/core/status.h"
 #include "tensorflow/core/lib/io/path.h"
@@ -61,6 +60,7 @@ ProfileRequest PopulateProfileRequest(int duration_ms,
   }
   request.add_tools("op_profile");
   request.add_tools("input_pipeline");
+  request.add_tools("kernel_stats");
   request.add_tools("memory_viewer");
   request.add_tools("overview_page");
   request.add_tools("pod_viewer");
@@ -69,9 +69,21 @@ ProfileRequest PopulateProfileRequest(int duration_ms,
   return request;
 }
 
-bool ShouldRetryTracing(Status status) {
+inline Status FromGrpcStatus(const ::grpc::Status& s) {
+  return s.ok() ? Status::OK()
+                : Status(static_cast<error::Code>(s.error_code()),
+                         s.error_message());
+}
+
+inline bool ShouldRetryTracing(Status status) {
   return status.code() == error::Code::UNAVAILABLE ||
-         status.code() == error::Code::ALREADY_EXISTS;
+         status.code() == error::Code::ALREADY_EXISTS ||
+         // When auto-reconnecting to a remote TensorFlow worker after it
+         // restarts, gRPC can return an UNKNOWN error code with a "Stream
+         // removed" error message. This should not be treated as an
+         // unrecoverable error.
+         (status.code() == error::Code::UNKNOWN &&
+          status.error_message() == "Stream removed");
 }
 
 // Returns whether the returned trace is empty.
@@ -138,8 +150,8 @@ Status NewSession(const string& service_addr,
   // TODO(jiesun): GRPC support following relevant naming scheme:
   // 1. dns:///host:port
   // 2. ipv4:host:port or ipv6:[host]:port
-  // We might need to change the prefix which depends on what TPU name resolver
-  // will give us.
+  // We might need to change the prefix which depends on what cluster name
+  // resolver will give us.
   std::unique_ptr<grpc::ProfileAnalysis::Stub> stub =
       grpc::ProfileAnalysis::NewStub(::grpc::CreateCustomChannel(
           "dns:///" + service_addr, ::grpc::InsecureChannelCredentials(),
@@ -180,7 +192,7 @@ Status ValidateHostPortPair(const string& host_port) {
   return Status::OK();
 }
 
-// Starts tracing on a single or multiple TPU hosts and saves the result in the
+// Starts tracing on a single or multiple hosts and saves the result in the
 // given logdir. If no trace was collected, retries tracing for
 // num_tracing_attempts.
 Status Trace(const string& service_addr, const string& logdir,
@@ -200,14 +212,14 @@ Status Trace(const string& service_addr, const string& logdir,
   ProfileOptions opts;
   opts.set_include_dataset_ops(include_dataset_ops);
   while (true) {
-    std::cout << "Starting to profile TPU traces for " << duration_ms << " ms. "
+    std::cout << "Starting to trace for " << duration_ms << " ms. "
               << "Remaining attempt(s): " << --remaining_attempts << std::endl;
     if (hostnames.empty()) {
       status = Profile(service_addr, logdir, duration_ms, repository_root,
                        session_id, opts);
     } else {
-      string tpu_master = service_addr;
-      status = NewSession(tpu_master, hostnames, duration_ms, repository_root,
+      string master = service_addr;
+      status = NewSession(master, hostnames, duration_ms, repository_root,
                           session_id, opts);
     }
     if (remaining_attempts <= 0 || status.ok() || !ShouldRetryTracing(status))
