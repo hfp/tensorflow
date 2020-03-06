@@ -101,7 +101,7 @@ class SimpleStepStatsCollector : public StepStatsCollectorInterface {
   };
 
   mutex mu_;
-  int64 processing_time_ GUARDED_BY(mu_) = 0;
+  int64 processing_time_ TF_GUARDED_BY(mu_) = 0;
 };
 
 Status RunShortCircuit(const ShortCircuitInfo& info,
@@ -910,7 +910,7 @@ Status CapturedFunction::IsMultiDevice(IteratorContext* ctx,
     const FunctionDef* fdef;
     TF_RETURN_IF_ERROR(LookupFunction(*metadata_->lib_def(), name, &fdef));
     for (const auto& node : fdef->node_def()) {
-      // Check if the op has a kernel availabe for the current device.
+      // Check if the op has a kernel available for the current device.
       if (!KernelDefAvailable(current_device_type, node)) {
         *is_multi_device = true;
         return Status::OK();

@@ -493,7 +493,7 @@ class SerializationContext {
     // `input_list`.
     bool fail_if_unimplemented = true;
 
-    // Indicates whether (potentionally large) data tensors should be
+    // Indicates whether (potentially large) data tensors should be
     // serialized, or replaced with a placeholder returned in `input_list`. The
     // latter makes sense to do when performing data agnostic graph rewrites to
     // reduce the memory usage.
@@ -641,7 +641,7 @@ class IteratorBase {
     return errors::Unimplemented("RestoreInternal");
   }
 
-  // Returns the number of elements produced by this itertaor.
+  // Returns the number of elements produced by this iterator.
   int64 num_elements() const {
     if (node_) return node_->num_elements();
     return 0;
@@ -815,9 +815,10 @@ class DatasetBase : public core::RefCounted {
   ABSL_DEPRECATED("Use CheckExternalState instead.")
   virtual bool IsStateful() const { return false; }
 
-  // Indicates whether the dataset depends on any external state. If so, the
-  // method returns `errors::FailedPrecondition` with a message that identifies
-  // the external state. Otherwise, the method returns `Status::OK()`.
+  // Indicates whether the dataset depends on any external state which would
+  // prevent it from being serializable. If so, the method returns
+  // `errors::FailedPrecondition` with a message that identifies the external
+  // state. Otherwise, the method returns `Status::OK()`.
   //
   // TODO(jsimsa): Make this method pure virtual once all `DatasetBase`
   // implementations have an override.
@@ -907,17 +908,6 @@ class DatasetBaseIterator : public IteratorBase {
   }
 
   Status Save(SerializationContext* ctx, IteratorStateWriter* writer) final {
-    Status s = params_.dataset->CheckExternalState();
-    if (!s.ok()) {
-      if (ctx->external_state_policy() ==
-          SerializationContext::ExternalStatePolicy::kWarn) {
-        LOG(WARNING) << "Dataset contains external state: " << s.ToString();
-      }
-      if (ctx->external_state_policy() ==
-          SerializationContext::ExternalStatePolicy::kFail) {
-        return s;
-      }
-    }
     return IteratorBase::Save(ctx, writer);
   }
 
@@ -1149,8 +1139,8 @@ class BackgroundWorker {
   std::unique_ptr<Thread> thread_;
   mutex mu_;
   condition_variable cond_var_;
-  bool cancelled_ GUARDED_BY(mu_) = false;
-  std::deque<std::function<void()>> work_queue_ GUARDED_BY(mu_);
+  bool cancelled_ TF_GUARDED_BY(mu_) = false;
+  std::deque<std::function<void()>> work_queue_ TF_GUARDED_BY(mu_);
 };
 
 // Registry of names of ops whose kernels subclass the `DatasetOpKernel` class.

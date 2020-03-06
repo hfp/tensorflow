@@ -68,7 +68,7 @@ BuiltinOpResolver::BuiltinOpResolver() {
              /* max_version */ 3);
   AddBuiltin(BuiltinOperator_SVDF, Register_SVDF(),
              /* min_version */ 1,
-             /* max_version */ 2);
+             /* max_version */ 3);
   AddBuiltin(BuiltinOperator_RNN, Register_RNN(),
              /* min_version */ 1,
              /* max_version */ 2);
@@ -156,7 +156,7 @@ BuiltinOpResolver::BuiltinOpResolver() {
   AddBuiltin(BuiltinOperator_SQUEEZE, Register_SQUEEZE());
   AddBuiltin(BuiltinOperator_STRIDED_SLICE, Register_STRIDED_SLICE(),
              /* min_version */ 1,
-             /* max_version */ 3);
+             /* max_version */ 4);
   AddBuiltin(BuiltinOperator_EXP, Register_EXP());
   AddBuiltin(BuiltinOperator_TOPK_V2, Register_TOPK_V2(),
              /* min_version */ 1,

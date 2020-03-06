@@ -148,11 +148,11 @@ def tf_repositories(path_prefix = "", tf_repo_name = ""):
 
     tf_http_archive(
         name = "XNNPACK",
-        sha256 = "ee54bd30c86d3d959f9367d5a969ba20ca58eea7fe865785d358d5f776b99b2f",
-        strip_prefix = "XNNPACK-5b5a0624a80655e40aff8e96de97706aeb008281",
+        sha256 = "100f675c099c74da46dea8da025f6f9b5e0307370f3dde506d11bd78b2b7d171",
+        strip_prefix = "XNNPACK-4ea95bef8cdd942895f23f5cc09c778d10500551",
         urls = [
-            "https://storage.googleapis.com/mirror.tensorflow.org/github.com/google/XNNPACK/archive/5b5a0624a80655e40aff8e96de97706aeb008281.zip",
-            "https://github.com/google/XNNPACK/archive/5b5a0624a80655e40aff8e96de97706aeb008281.zip",
+            "https://storage.googleapis.com/mirror.tensorflow.org/github.com/google/XNNPACK/archive/4ea95bef8cdd942895f23f5cc09c778d10500551.zip",
+            "https://github.com/google/XNNPACK/archive/4ea95bef8cdd942895f23f5cc09c778d10500551.zip",
         ],
     )
 
@@ -174,12 +174,12 @@ def tf_repositories(path_prefix = "", tf_repo_name = ""):
 
     tf_http_archive(
         name = "mkl_dnn_v1",
-        build_file = clean_dep("//third_party/mkl_dnn:mkldnn.BUILD"),
-        sha256 = "fcc2d951f7170eade0cfdd0d8d1d58e3e7785bd326bca6555f3722f8cba71811",
-        strip_prefix = "mkl-dnn-1.0-pc2",
+        build_file = clean_dep("//third_party/mkl_dnn:mkldnn_v1.BUILD"),
+        sha256 = "30979a09753e8e35d942446c3778c9f0eba543acf2fb0282af8b9c89355d0ddf",
+        strip_prefix = "mkl-dnn-1.2",
         urls = [
-            "https://storage.googleapis.com/mirror.tensorflow.org/github.com/intel/mkl-dnn/archive/v1.0-pc2.tar.gz",
-            "https://github.com/intel/mkl-dnn/archive/v1.0-pc2.tar.gz",
+            "https://storage.googleapis.com/mirror.tensorflow.org/github.com/intel/mkl-dnn/archive/v1.2.tar.gz",
+            "https://github.com/intel/mkl-dnn/archive/v1.2.tar.gz",
         ],
     )
 
@@ -597,8 +597,8 @@ def tf_repositories(path_prefix = "", tf_repo_name = ""):
     )
 
     # Check out LLVM and MLIR from llvm-project.
-    LLVM_COMMIT = "387c3f74fd8efdc0be464b0e1a8033cc1eeb739c"
-    LLVM_SHA256 = "5648d1bdd933f45aa6556cf104b32a0418121ce6961f5f47e8ef5bc6e428434f"
+    LLVM_COMMIT = "8e4a8677be3061317056335d298d85ce60c23dff"
+    LLVM_SHA256 = "8c5b6ed8e70ec0533f2a96ff9ece1191523e52715e84a0d962458eb67d023e15"
     LLVM_URLS = [
         "https://storage.googleapis.com/mirror.tensorflow.org/github.com/llvm/llvm-project/archive/{commit}.tar.gz".format(commit = LLVM_COMMIT),
         "https://github.com/llvm/llvm-project/archive/{commit}.tar.gz".format(commit = LLVM_COMMIT),

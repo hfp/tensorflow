@@ -469,6 +469,7 @@ tf_cuda_library(
         "//tensorflow/core/framework:graph_to_functiondef.h",
         "//tensorflow/core/framework:kernel_def_builder.h",
         "//tensorflow/core/framework:kernel_def_util.h",
+        "//tensorflow/core/framework:kernel_shape_util.h",
         "//tensorflow/core/framework:log_memory.h",
         "//tensorflow/core/framework:logging.h",
         "//tensorflow/core/framework:lookup_interface.h",
@@ -1020,7 +1021,6 @@ cc_library(
         "//tensorflow/core/kernels:constant_op",
         "//tensorflow/core/kernels:control_flow_ops",
         "//tensorflow/core/kernels:ctc_ops",
-        "//tensorflow/core/kernels:cudnn_rnn_kernels",
         "//tensorflow/core/kernels:data_flow",
         "//tensorflow/core/kernels:decode_proto_op",
         "//tensorflow/core/kernels:encode_proto_op",
@@ -1095,6 +1095,7 @@ cc_library(
         "//tensorflow/core/kernels:mkl_tfconv_op",
         "//tensorflow/core/kernels:mkl_tmp_bf16_ops",
     ]) + if_cuda([
+        "//tensorflow/core/kernels:cudnn_rnn_kernels",
         "//tensorflow/core/grappler/optimizers:gpu_swapping_kernels",
         "//tensorflow/core/grappler/optimizers:gpu_swapping_ops",
     ]) + if_nccl([
@@ -2351,6 +2352,7 @@ tf_cuda_library(
         "//tensorflow/core/framework:attr_value_util",
         "//tensorflow/core/framework:bfloat16",
         "//tensorflow/core/framework:common_shape_fns",
+        "//tensorflow/core/framework:kernel_shape_util",
         "//tensorflow/core/framework:node_def_util",
         "//tensorflow/core/framework:node_properties",
         "//tensorflow/core/framework:numeric_types",

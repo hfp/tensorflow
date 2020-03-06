@@ -20,6 +20,7 @@ package_group(
         "//tensorflow/compiler/xla/...",
         "//third_party/iree/...",
         "//third_party/mlir_edge/...",
+        "//third_party/tf_runtime/tools/tf_kernel_gen/...",
     ],
 )
 
@@ -33,6 +34,7 @@ filegroup(
         "ir/hlo_utils.td",
         "ir/lhlo_ops.td",
         "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:include/mlir/Analysis/InferTypeOpInterface.td",
     ],
 )
 
@@ -132,13 +134,22 @@ cc_library(
 
 cc_library(
     name = "map_xla_to_scalar_op",
-    srcs = [],
     hdrs = ["transforms/map_xla_to_scalar_op.h"],
     deps = [
         ":hlo",
         ":lhlo",
+        ":map_hlo_to_lhlo_op",
         "@llvm-project//llvm:support",
         "@llvm-project//mlir:StandardOps",
+    ],
+)
+
+cc_library(
+    name = "map_hlo_to_lhlo_op",
+    hdrs = ["transforms/map_hlo_to_lhlo_op.h"],
+    deps = [
+        ":hlo",
+        ":lhlo",
     ],
 )
 
@@ -227,12 +238,26 @@ cc_library(
 )
 
 cc_library(
+    name = "lhlo_copy_removal",
+    srcs = ["transforms/lhlo_copy_removal.cc"],
+    deps = [
+        ":lhlo",
+        "@com_google_absl//absl/memory",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:Pass",
+        "@llvm-project//mlir:StandardOps",
+    ],
+    alwayslink = 1,
+)
+
+cc_library(
     name = "hlo_legalize_to_lhlo",
     srcs = ["transforms/hlo_legalize_to_lhlo.cc"],
     deps = [
         ":hlo",
         ":hlo_shape_derivation",
         ":lhlo",
+        ":map_hlo_to_lhlo_op",
         "@com_google_absl//absl/memory",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:Pass",
@@ -342,7 +367,9 @@ cc_library(
     ],
     deps = [
         ":hlo",
+        "@llvm-project//llvm:support",
         "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:StandardOps",
         "@llvm-project//mlir:Transforms",
     ],
 )
@@ -433,6 +460,7 @@ cc_library(
     includes = ["include"],
     deps = [
         ":convert_op_folder",
+        ":hlo",
         "//tensorflow/compiler/xla:literal",
         "//tensorflow/compiler/xla/service:hlo",
         "@llvm-project//mlir:IR",
@@ -554,7 +582,9 @@ cc_library(
         "//tensorflow/compiler/xla:xla_data_proto_cc",
         "//tensorflow/compiler/xla:xla_proto_cc",
         "//tensorflow/compiler/xla/service:hlo",
+        "//tensorflow/compiler/xla/service:hlo_casting_utils",
         "//tensorflow/core:lib",
+        "@com_google_absl//absl/types:optional",
         "@llvm-project//llvm:support",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:StandardOps",
@@ -595,6 +625,7 @@ tf_native_cc_binary(
 genrule(
     name = "operator_writer_inc",
     srcs = [
+        "@llvm-project//mlir:include/mlir/Analysis/InferTypeOpInterface.td",
         "@llvm-project//mlir:include/mlir/IR/OpBase.td",
         ":ir/hlo_ops.td",
         ":ir/hlo_ops_base.td",
