@@ -36,6 +36,9 @@ namespace tensorflow {
 namespace data {
 namespace snapshot_util {
 
+/* static */ constexpr const int64 Reader::kSnappyReaderInputBufferSizeBytes;
+/* static */ constexpr const int64 Reader::kSnappyReaderOutputBufferSizeBytes;
+
 Writer::Writer(WritableFile* dest, const string& compression_type, int version,
                const DataTypeVector& dtypes)
     : dest_(dest), compression_type_(compression_type), version_(version) {
@@ -270,11 +273,12 @@ Status Reader::ReadTensors(std::vector<Tensor>* read_tensors) {
       size_t tensor_proto_size = tensor_proto_strs[complex_index].second;
       TensorProto tp;
 #if defined(PLATFORM_GOOGLE)
-      absl::string_view tensor_proto_view(tensor_proto_str.get(),
-                                          tensor_proto_size);
-      absl::Cord c = absl::MakeCordFromExternal(
-          tensor_proto_view,
-          [tensor_proto_str = std::move(tensor_proto_str)]() {});
+      auto tensor_proto_ptr = tensor_proto_str.release();
+      absl::Cord c;
+      c.AppendExternalMemory(
+          absl::string_view(tensor_proto_ptr, tensor_proto_size),
+          tensor_proto_ptr,
+          [](void* arg) { delete[] static_cast<char*>(arg); });
       if (!tp.ParseFromCord(c)) {
         return errors::Internal("Could not parse TensorProto");
       }
@@ -379,11 +383,13 @@ Status Reader::ReadRecord(absl::Cord* record) {
   if (compression_type_ == io::compression::kNone) {
     return input_stream_->ReadNBytes(length, record);
   } else {
-    tstring tmp_str;
-    TF_RETURN_IF_ERROR(input_stream_->ReadNBytes(length, &tmp_str));
-    absl::string_view tmp_view = tmp_str;
-    record->Append(absl::MakeCordFromExternal(
-        tmp_view, [tmp_str = std::move(tmp_str)]() {}));
+    auto tmp_str = absl::make_unique<tstring>();
+    TF_RETURN_IF_ERROR(input_stream_->ReadNBytes(length, tmp_str.get()));
+    tstring* tmp_str_raw = tmp_str.release();
+    record->AppendExternalMemory(*tmp_str_raw, tmp_str_raw,
+                                 [](absl::string_view unused_data, void* arg) {
+                                   delete static_cast<tstring*>(arg);
+                                 });
     return Status::OK();
   }
 }

@@ -258,9 +258,7 @@ class BroadcastInDimConverter
 
       if (broadcastOp.broadcast_dimensions()) {
         for (const auto& broadcastDim :
-             enumerate(broadcastOp.broadcast_dimensions()
-                           .getValue()
-                           .getIntValues())) {
+             enumerate(broadcastOp.broadcast_dimensions().getIntValues())) {
           int size = broadcastDim.value().getSExtValue();
           // TODO(pifon): Add support for args with dynamic shapes for the case
           // when a dimension of size 1 is broadcasted into dim of size N.
@@ -298,8 +296,6 @@ class ScalarBroadcastInDimConverter
     auto resultMemrefType =
         broadcastOp.output().getType().dyn_cast<MemRefType>();
     if (!operandMemrefType || !resultMemrefType) return matchFailure();
-    auto broadcastDims = broadcastOp.broadcast_dimensions();
-    if (!broadcastDims.hasValue()) return matchFailure();
 
     unsigned nloops = resultMemrefType.getRank();
     SmallVector<Attribute, 1> indexingMaps{
@@ -548,6 +544,7 @@ void populateLHLOToLinalgConversionPattern(MLIRContext* context,
                    PointwiseToLinalgConverter<xla_lhlo::MulOp>,
                    PointwiseToLinalgConverter<xla_lhlo::NegOp>,
                    PointwiseToLinalgConverter<xla_lhlo::RemOp>,
+                   PointwiseToLinalgConverter<xla_lhlo::RsqrtOp>,
                    PointwiseToLinalgConverter<xla_lhlo::SelectOp>,
                    PointwiseToLinalgConverter<xla_lhlo::SignOp>,
                    PointwiseToLinalgConverter<xla_lhlo::SqrtOp>,
@@ -641,6 +638,7 @@ void populateHLOToLinalgConversionPattern(MLIRContext* context,
                    PointwiseToLinalgConverter<xla_hlo::MulOp, false>,
                    PointwiseToLinalgConverter<xla_hlo::NegOp, false>,
                    PointwiseToLinalgConverter<xla_hlo::RemOp, false>,
+                   PointwiseToLinalgConverter<xla_hlo::RsqrtOp, false>,
                    PointwiseToLinalgConverter<xla_hlo::SelectOp, false>,
                    PointwiseToLinalgConverter<xla_hlo::SqrtOp, false>,
                    PointwiseToLinalgConverter<xla_hlo::SubOp, false>,

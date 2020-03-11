@@ -51,6 +51,26 @@ gentbl(
     ],
 )
 
+gentbl(
+    name = "SideEffectInterfacesIncGen",
+    strip_include_prefix = "include",
+    tbl_outs = [
+        (
+            "-gen-op-interface-decls",
+            "include/mlir/IR/SideEffectInterfaces.h.inc",
+        ),
+        (
+            "-gen-op-interface-defs",
+            "include/mlir/IR/SideEffectInterfaces.cpp.inc",
+        ),
+    ],
+    tblgen = ":mlir-tblgen",
+    td_file = "include/mlir/IR/SideEffects.td",
+    td_srcs = [
+        ":OpBaseTdFiles",
+    ],
+)
+
 cc_library(
     name = "IR",
     srcs = glob([
@@ -68,6 +88,7 @@ cc_library(
         ":DialectSymbolRegistry",
         ":InferTypeOpInterfaceIncGen",
         ":OpAsmInterfacesIncGen",
+        ":SideEffectInterfacesIncGen",
         ":Support",
         "@llvm-project//llvm:support",
     ],
@@ -221,6 +242,7 @@ filegroup(
         "include/mlir/Analysis/ControlFlowInterfaces.td",
         "include/mlir/Dialect/StandardOps/IR/Ops.td",
         "include/mlir/IR/OpAsmInterface.td",
+        "include/mlir/IR/SideEffects.td",
         ":OpBaseTdFiles",
     ],
 )
@@ -301,9 +323,7 @@ cc_library(
     hdrs = glob([
         "include/mlir/Dialect/AffineOps/*.h",
         "include/mlir/Dialect/AffineOps/EDSC/*.h",
-    ]) + [
-        "include/mlir/Transforms/SideEffectsInterface.h",
-    ],
+    ]),
     includes = ["include"],
     deps = [
         ":AffineOpsIncGen",
@@ -369,7 +389,6 @@ cc_library(
         "include/mlir/Dialect/LoopOps/EDSC/*.h",
     ]) + [
         "include/mlir/Transforms/LoopLikeInterface.h",
-        "include/mlir/Transforms/SideEffectsInterface.h",
     ],
     includes = ["include"],
     deps = [
@@ -1565,8 +1584,6 @@ cc_library(
     hdrs = [
         "include/mlir/Target/LLVMIR/ModuleTranslation.h",
     ],
-    # TODO(herhut): Remove once fixed upstream.
-    copts = ["-Wno-pessimizing-move"],
     includes = ["include"],
     deps = [
         ":IR",
@@ -2546,6 +2563,7 @@ cc_library(
     ]),
     includes = ["include"],
     deps = [
+        ":DialectUtils",
         ":EDSC",
         ":IR",
         ":LLVMDialect",
@@ -2603,6 +2621,7 @@ exports_files(
         "include/mlir/Dialect/StandardOps/IR/Ops.td",
         "include/mlir/IR/OpAsmInterface.td",
         "include/mlir/IR/OpBase.td",
+        "include/mlir/IR/SideEffects.td",
         "include/mlir/Transforms/InliningUtils.h",
     ],
     visibility = ["@llvm-project//mlir:friends"],
