@@ -258,12 +258,6 @@ static bool CallLibxsmmConvGeneric(OpKernelContext* ctx,
   libxsmm_dnn_tensor *libxsmm_input, *libxsmm_output, *libxsmm_filter;
   libxsmm_dnn_err_t status;
 
-  status = libxsmm_dnn_get_codegen_success(regentry.handle, kind);
-  if (status == LIBXSMM_DNN_WARN_FALLBACK) {
-    return false;  // Use non-libxsmm code
-  }
-  CHECK_LIBXSMM_DNN(status, "code generation");
-
 #if defined(LIBXSMM_DETAILED_TIMING)
   l_tick2 = libxsmm_timer_tick();
 #endif
