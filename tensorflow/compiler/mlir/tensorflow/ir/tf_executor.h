@@ -21,13 +21,13 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_MLIR_TENSORFLOW_IR_TF_EXECUTOR_H_
 #define TENSORFLOW_COMPILER_MLIR_TENSORFLOW_IR_TF_EXECUTOR_H_
 
-#include "mlir/Dialect/Traits.h"  // TF:llvm-project
-#include "mlir/IR/Attributes.h"  // TF:llvm-project
-#include "mlir/IR/Builders.h"  // TF:llvm-project
-#include "mlir/IR/Dialect.h"  // TF:llvm-project
-#include "mlir/IR/Matchers.h"  // TF:llvm-project
-#include "mlir/IR/OpImplementation.h"  // TF:llvm-project
-#include "mlir/IR/StandardTypes.h"  // TF:llvm-project
+#include "mlir/Dialect/Traits.h"  // from @llvm-project
+#include "mlir/IR/Attributes.h"  // from @llvm-project
+#include "mlir/IR/Builders.h"  // from @llvm-project
+#include "mlir/IR/Dialect.h"  // from @llvm-project
+#include "mlir/IR/Matchers.h"  // from @llvm-project
+#include "mlir/IR/OpImplementation.h"  // from @llvm-project
+#include "mlir/IR/StandardTypes.h"  // from @llvm-project
 #include "tensorflow/compiler/mlir/tensorflow/ir/tf_types.h"
 
 namespace mlir {
@@ -35,6 +35,7 @@ namespace tf_executor {
 
 class TensorFlowExecutorDialect : public Dialect {
  public:
+  static StringRef getDialectNamespace() { return "tf_executor"; }
   explicit TensorFlowExecutorDialect(MLIRContext *context);
 
   // Parses a type registered to this dialect.
@@ -53,7 +54,7 @@ enum Kind {
 
 // The Control type is a token-like value that models control dependencies from
 // TensorFlow graphs.
-class ControlType : public Type::TypeBase<ControlType, Type> {
+class ControlType : public Type::TypeBase<ControlType, Type, TypeStorage> {
  public:
   using Base::Base;
 
@@ -65,7 +66,7 @@ class ControlType : public Type::TypeBase<ControlType, Type> {
   static bool kindof(unsigned kind) { return kind == TFTypes::Control; }
 };
 
-class TokenType : public Type::TypeBase<TokenType, Type> {
+class TokenType : public Type::TypeBase<TokenType, Type, TypeStorage> {
  public:
   using Base::Base;
 

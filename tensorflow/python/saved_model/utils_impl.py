@@ -126,7 +126,13 @@ def build_tensor_info_from_op(op):
 
   Returns:
     A TensorInfo protocol buffer constructed based on the supplied argument.
+
+  Raises:
+    RuntimeError: If eager execution is enabled.
   """
+  if context.executing_eagerly():
+    raise RuntimeError(
+        "build_tensor_info_from_op is not supported in Eager mode.")
   return meta_graph_pb2.TensorInfo(
       dtype=types_pb2.DT_INVALID,
       tensor_shape=tensor_shape.unknown_shape().as_proto(),
@@ -178,7 +184,7 @@ def get_tensor_from_tensor_info(tensor_info, graph=None, import_scope=None):
     spec = struct_coder.decode_proto(spec_proto)
     components = [_get_tensor(component.name) for component in
                   tensor_info.composite_tensor.components]
-    return spec.from_components(components)
+    return nest.pack_sequence_as(spec, components, expand_composites=True)
   else:
     raise ValueError("Invalid TensorInfo.encoding: %s" % encoding)
 

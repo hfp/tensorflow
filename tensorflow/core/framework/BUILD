@@ -20,6 +20,9 @@ load(
     "cc_library",
 )
 
+# buildifier: disable=same-origin-load
+load("//tensorflow:tensorflow.bzl", "tf_selective_registration_deps")
+
 package(
     default_visibility = [
         "//tensorflow/core:__subpackages__",
@@ -28,7 +31,7 @@ package(
 )
 
 # Export all header files for which we do not yet provide a dedicated build
-# rule. This avoids breading all the rules in tensorflow/core/BUILD.
+# rule. This avoids breaking all the rules in tensorflow/core/BUILD.
 exports_files(
     srcs = [
         "allocator_registry.h",
@@ -36,7 +39,7 @@ exports_files(
         "collective.h",
         "control_flow.h",
         "dataset.h",
-        "dataset_stateful_op_whitelist.h",
+        "dataset_stateful_op_allowlist.h",
         "device_base.h",
         "function.h",
         "function_handle_cache.h",
@@ -47,9 +50,11 @@ exports_files(
         "logging.h",
         "lookup_interface.h",
         "memory_types.h",
+        "metrics.h",
         "model.h",
         "node_def_builder.h",
         "numeric_op.h",
+        "numeric_op_base.h",
         "op_kernel.h",
         "op_requires.h",
         "op_segment.h",
@@ -73,10 +78,12 @@ exports_files(
         "tensor_util.h",
         "thread_factory.h",
         "tracking_allocator.h",
-        "unique_tensor_references.h",
         "versions.h",
     ],
-    visibility = ["//tensorflow/core:__pkg__"],
+    visibility = [
+        "//tensorflow/core:__pkg__",
+        "//tensorflow/core/common_runtime:__pkg__",
+    ],
 )
 
 # List of exported test source files that do not yet have local build rules.
@@ -159,7 +166,7 @@ filegroup(
         "common_shape_fns.h",
         "control_flow.h",
         "dataset.h",
-        "dataset_stateful_op_whitelist.h",
+        "dataset_stateful_op_allowlist.h",
         "device_base.h",
         "function.h",
         "function_handle_cache.h",
@@ -173,11 +180,13 @@ filegroup(
         "logging.h",
         "lookup_interface.h",
         "memory_types.h",
+        "metrics.h",
         "model.h",
         "node_def_builder.h",
         "node_def_util.h",
         "node_properties.h",
         "numeric_op.h",
+        "numeric_op_base.h",
         "numeric_types.h",
         "op.h",
         "op_def_builder.h",
@@ -205,6 +214,7 @@ filegroup(
         "shared_ptr_variant.h",
         "stats_aggregator.h",
         "tensor.h",
+        "tensor_key.h",
         "tensor_reference.h",
         "tensor_shape.h",
         "tensor_slice.h",
@@ -216,7 +226,6 @@ filegroup(
         "type_traits.h",
         "typed_allocator.h",
         "types.h",
-        "unique_tensor_references.h",
         "variant.h",
         "variant_encode_decode.h",
         "variant_op_registry.h",
@@ -243,6 +252,7 @@ filegroup(
         "logging.cc",
         "lookup_interface.cc",
         "memory_types.cc",
+        "metrics.cc",
         "model.cc",
         "node_def_builder.cc",
         "op_kernel.cc",
@@ -254,7 +264,6 @@ filegroup(
         "run_handler_util.cc",
         "tensor_slice.cc",
         "tensor_util.cc",
-        "unique_tensor_references.cc",
         "versions.cc",
     ],
 )
@@ -275,13 +284,17 @@ filegroup(
         "kernel_shape_util.h",
         "log_memory.cc",
         "log_memory.h",
+        "numeric_op_base.h",
         "numeric_types.h",
         "op_requires.h",
+        "ops_util.cc",
+        "ops_util.h",
         "register_types.h",
         "resource_handle.cc",
         "resource_handle.h",
         "tensor.cc",
         "tensor.h",
+        "tensor_key.h",
         "tensor_shape.cc",
         "tensor_shape.h",
         "tensor_types.h",
@@ -317,7 +330,7 @@ filegroup(
         "control_flow.h",
         "dataset.cc",
         "dataset.h",
-        "dataset_stateful_op_whitelist.h",
+        "dataset_stateful_op_allowlist.h",
         "device_base.cc",
         "device_base.h",
         "function.cc",
@@ -341,6 +354,8 @@ filegroup(
         "lookup_interface.h",
         "memory_types.cc",
         "memory_types.h",
+        "metrics.cc",
+        "metrics.h",
         "model.cc",
         "model.h",
         "node_def_builder.cc",
@@ -360,8 +375,6 @@ filegroup(
         "op_kernel.h",
         "op_segment.cc",
         "op_segment.h",
-        "ops_util.cc",
-        "ops_util.h",
         "partial_tensor_shape.h",
         "queue_interface.h",
         "reader_interface.h",
@@ -381,15 +394,12 @@ filegroup(
         "shape_inference.cc",
         "shape_inference.h",
         "stats_aggregator.h",
-        "tensor_interface.h",
         "tensor_reference.h",
         "tensor_slice.cc",
         "tensor_slice.h",
         "tensor_util.cc",
         "tensor_util.h",
         "thread_factory.h",
-        "unique_tensor_references.cc",
-        "unique_tensor_references.h",
         "versions.cc",
         "versions.h",
     ],
@@ -420,7 +430,7 @@ filegroup(
     ],
 )
 
-# Individual targets. These should be prefered over tensorflow/core:framework
+# Individual targets. These should be preferred over tensorflow/core:framework
 # whenever possible.
 
 # This is redundant with the "tensorflow/core:framework" target. It's useful for
@@ -502,7 +512,7 @@ cc_library(
     srcs = ["tensor_testutil.cc"],
     hdrs = ["tensor_testutil.h"],
     copts = tf_copts(),
-    visibility = ["//tensorflow/core:__subpackages__"],
+    visibility = ["//tensorflow:internal"],
     deps = [
         "//tensorflow/core:framework",
         "//tensorflow/core:lib",
@@ -613,7 +623,7 @@ cc_library(
 cc_library(
     name = "bounds_check",
     hdrs = ["bounds_check.h"],
-    visibility = ["//tensorflow/core:__pkg__"],
+    visibility = ["//tensorflow/core/kernels:friends"],
     deps = [
         "//tensorflow/core/platform:macros",
         "//third_party/eigen3",
@@ -629,7 +639,7 @@ cc_library(
     ],
     visibility = [
         "//tensorflow/core:__pkg__",
-        "//tensorflow/core/tfrt_delegate:__pkg__",
+        "//tensorflow/core/runtime_fallback:__subpackages__",
     ],
     deps = [
         ":bounds_check",
@@ -669,7 +679,11 @@ cc_library(
     name = "type_index",
     hdrs = ["type_index.h"],
     visibility = ["//visibility:private"],
-    deps = ["//tensorflow/core/platform:types"],
+    deps = [
+        "//tensorflow/core/platform:hash",
+        "//tensorflow/core/platform:stringpiece",
+        "//tensorflow/core/platform:types",
+    ],
 )
 
 cc_library(
@@ -714,6 +728,7 @@ tf_cuda_library(
     visibility = [
         "//tensorflow/core:__pkg__",
         "//tensorflow/core/util:__pkg__",
+        "//tensorflow/security/fuzzing:__subpackages__",
     ],
     deps = [
         ":allocation_description_proto_cc",
@@ -931,6 +946,7 @@ cc_library(
 cc_library(
     name = "selective_registration",
     hdrs = ["selective_registration.h"],
+    deps = tf_selective_registration_deps(),
 )
 
 cc_library(
@@ -1003,6 +1019,7 @@ tf_cc_tests(
     srcs = [
         "allocator_test.cc",
         "attr_value_util_test.cc",
+        "batch_util_test.cc",
         "bfloat16_test.cc",
         "cancellation_test.cc",
         "common_shape_fns_test.cc",
@@ -1036,7 +1053,6 @@ tf_cc_tests(
         "tensor_util_test.cc",
         "tracking_allocator_test.cc",
         "types_test.cc",
-        "unique_tensor_references_test.cc",
         "variant_op_registry_test.cc",
         "variant_test.cc",
     ],

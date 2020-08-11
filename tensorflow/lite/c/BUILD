@@ -3,10 +3,6 @@ load(
     "tflite_cc_shared_object",
     "tflite_copts",
 )
-load(
-    "//tensorflow/lite/micro:build_def.bzl",
-    "cc_library",
-)
 
 package(
     default_visibility = ["//visibility:public"],
@@ -22,6 +18,9 @@ package(
 tflite_cc_shared_object(
     name = "tensorflowlite_c",
     linkopts = select({
+        "//tensorflow:ios": [
+            "-Wl,-exported_symbols_list,$(location //tensorflow/lite/c:exported_symbols.lds)",
+        ],
         "//tensorflow:macos": [
             "-Wl,-exported_symbols_list,$(location //tensorflow/lite/c:exported_symbols.lds)",
         ],
@@ -63,6 +62,7 @@ cc_library(
         "//tensorflow/lite:framework",
         "//tensorflow/lite:version",
         "//tensorflow/lite/core/api",
+        "//tensorflow/lite/delegates/nnapi:nnapi_delegate",
         "//tensorflow/lite/kernels:builtin_ops",
     ],
     alwayslink = 1,
@@ -87,6 +87,7 @@ cc_test(
     name = "c_api_test",
     size = "small",
     srcs = ["c_api_test.cc"],
+    copts = tflite_copts(),
     data = [
         "//tensorflow/lite:testdata/add.bin",
         "//tensorflow/lite:testdata/add_quantized.bin",
@@ -103,6 +104,7 @@ cc_test(
     name = "c_api_experimental_test",
     size = "small",
     srcs = ["c_api_experimental_test.cc"],
+    copts = tflite_copts(),
     data = ["//tensorflow/lite:testdata/add.bin"],
     deps = [
         ":c_api",
@@ -121,7 +123,6 @@ cc_library(
         "builtin_op_data.h",
         "common.h",
     ],
-    build_for_embedded = True,
     alwayslink = 1,
 )
 
@@ -151,5 +152,20 @@ cc_test(
     deps = [
         ":common",
         "@com_google_googletest//:gtest",
+    ],
+)
+
+cc_test(
+    name = "c_test",
+    size = "small",
+    srcs = ["c_test.c"],
+    copts = tflite_copts(),
+    data = [
+        "//tensorflow/lite:testdata/add.bin",
+    ],
+    deps = [
+        ":c_api",
+        ":c_api_experimental",
+        ":common",
     ],
 )

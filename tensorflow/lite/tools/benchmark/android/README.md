@@ -31,13 +31,34 @@ bazel build -c opt \
   tensorflow/lite/tools/benchmark/android:benchmark_model
 ```
 
+(Optional) To enable Hexagon delegate with `--use_hexagon=true` option, you can
+download and install the libraries as the guided in [hexagon delegate]
+(https://www.tensorflow.org/lite/performance/hexagon_delegate#step_2_add_hexagon_libraries_to_your_android_app)
+page. For example, if you installed the libraries at third_party/hexagon_nn_skel
+and created third_party/hexagon_nn_skel/BUILD with a build target,
+
+```
+filegroup(
+    name = "libhexagon_nn_skel",
+    srcs = glob(["*.so"]),
+)
+```
+
+you need to modify tflite_hexagon_nn_skel_libraries macro in
+tensorflow/lite/special_rules.bzl to specifiy the build target.
+
+```
+return ["//third_party/hexagon_nn_skel:libhexagon_nn_skel"]
+```
+
 (2) Connect your phone. Install the benchmark APK to your phone with adb:
 
 ```
 adb install -r -d -g bazel-bin/tensorflow/lite/tools/benchmark/android/benchmark_model.apk
 ```
+
 Note: Make sure to install with "-g" option to grant the permission for reading
-extenal storage.
+external storage.
 
 (3) Push the compute graph that you need to test.
 
@@ -113,12 +134,12 @@ the system dismisses the notification and displays a third notification "Trace
 saved", confirming that your trace has been saved and that you're ready to share
 the system trace.
 
-(9) [Share](https://developer.android.com/topic/performance/tracing/on-device#share-trace)
+(9)
+[Share](https://developer.android.com/topic/performance/tracing/on-device#share-trace)
 a trace file,
 [convert](https://developer.android.com/topic/performance/tracing/on-device#converting_between_trace_formats)
 between tracing formats and
 [create](https://developer.android.com/topic/performance/tracing/on-device#create-html-report)
-an HTML report.
-Note that, the catured tracing file format is either in Perfetto format or in
-Systrace format depending on the Android version of your device. Select the
-appropriate method to handle the generated file.
+an HTML report. Note that, the captured tracing file format is either in
+Perfetto format or in Systrace format depending on the Android version of your
+device. Select the appropriate method to handle the generated file.
