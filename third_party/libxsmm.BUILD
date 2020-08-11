@@ -82,6 +82,7 @@ cc_library(
     #    "-Wno-vla",  # Libxsmm convolutions heavily use VLA.
     #],
     defines = [
+        "LIBXSMM_DEFAULT_CONFIG",
         "LIBXSMM_BUILD",
         "LIBXSMM_CTOR",
         "__BLAS=0",
